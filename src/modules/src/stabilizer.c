@@ -63,6 +63,15 @@ static sensorData_t sensorData;
 static state_t state;
 static control_t control;
 
+// my variables
+static float theta;
+static uint32_t timestamp_setpoint;
+static float x_err;
+static float y_err;
+static float angle1;
+static float angle_err;
+static control_t control2;
+
 static StateEstimatorType estimatorType;
 static ControllerType controllerType;
 
@@ -223,6 +232,13 @@ static void stabilizerTask(void* param)
 
   DEBUG_PRINT("Ready to fly.\n");
 
+  theta=0.0f;
+  timestamp_setpoint =0;
+
+  x_err = 0;
+  y_err = 0;
+  angle1 = 0;
+
   while(1) {
     // The sensor should unlock at 1kHz
     sensorsWaitDataReady();
@@ -251,14 +267,45 @@ static void stabilizerTask(void* param)
 
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
 
-      controller(&control, &setpoint, &sensorData, &state, tick);
+      // controller(&control, &setpoint, &sensorData, &state, tick);
+      
+      // my codes
+      if (timestamp_setpoint == setpoint.timestamp){
+        // no control input is received 
+        float dtheta = sensorData.gyro.z * 0.001f;
+        theta=theta+dtheta;
+      }
+      else{
+        // control input is received
+        timestamp_setpoint = setpoint.timestamp;
+        theta = - setpoint.attitudeRate.yaw;
+        x_err=setpoint.attitude.roll;
+        y_err= - setpoint.attitude.pitch;
+      }
+
+      if (theta > 180.0f){
+        theta=theta-360.0f;
+      }
+      else if (theta < -180.0f){
+        theta=theta+360.0f;
+      }
+
+      angle1 = atan2f(y_err, x_err);
+      angle_err = theta/180.0f*(float)M_PI - angle1;
+
+      control2.yaw= (1000 * (sqrtf((x_err)*(x_err)+(y_err)*(y_err)) * cosf(angle_err)));
+      control2.roll= (1000 * (sqrtf((x_err)*(x_err)+(y_err)*(y_err)) * sinf(angle_err)));
+      control2.thrust=setpoint.thrust;
+      control2.pitch= 0;
+
 
       checkEmergencyStopTimeout();
+      stabilizerResetEmergencyStop();
 
       if (emergencyStop) {
         powerStop();
       } else {
-        powerDistribution(&control);
+        powerDistribution(&control2);
       }
 
       // Log data to uSD card if configured
@@ -333,6 +380,10 @@ LOG_ADD(LOG_FLOAT, roll, &state.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &state.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &state.attitude.yaw)
 LOG_ADD(LOG_FLOAT, thrust, &control.thrust)
+LOG_ADD(LOG_FLOAT, ta, &theta)
+LOG_ADD(LOG_FLOAT, a1, &angle1)
+LOG_ADD(LOG_FLOAT, xe, &x_err)
+LOG_ADD(LOG_FLOAT, ye, &y_err)
 
 STATS_CNT_RATE_LOG_ADD(rtStab, &stabilizerRate)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
