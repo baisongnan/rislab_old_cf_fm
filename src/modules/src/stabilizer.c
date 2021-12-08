@@ -293,10 +293,27 @@ static void stabilizerTask(void* param)
       angle1 = atan2f(y_err, x_err);
       angle_err = theta/180.0f*(float)M_PI - angle1;
 
+      if (angle_err > (float)M_PI)
+      {
+        angle_err = angle_err - 2*(float)M_PI;
+      }
+      else if (angle_err < -(float)M_PI)
+      {
+        angle_err = angle_err + 2*(float)M_PI;
+      }
+
       control2.yaw= (1000 * (sqrtf((x_err)*(x_err)+(y_err)*(y_err)) * cosf(angle_err)));
-      control2.roll= (1000 * (sqrtf((x_err)*(x_err)+(y_err)*(y_err)) * sinf(angle_err)));
+      // control2.roll= (1000 * (sqrtf((x_err)*(x_err)+(y_err)*(y_err)) * sinf(angle_err)));
+      control2.roll= control2.yaw;
       control2.thrust=setpoint.thrust;
       control2.pitch= 0;
+
+      stateCompressed.ax = (int16_t)(sensorData.acc.x * 1000.0f);
+      stateCompressed.ay = (int16_t)(sensorData.acc.y * 1000.0f);
+      stateCompressed.az = (int16_t)(sensorData.acc.z * 1000.0f);
+      stateCompressed.rateRoll = (int16_t)(sensorData.gyro.x/180.0f*(float)M_PI * 1000.0f);
+      stateCompressed.ratePitch = (int16_t)(sensorData.gyro.y/180.0f*(float)M_PI * 1000.0f);
+      stateCompressed.rateYaw = (int16_t)(sensorData.gyro.z/180.0f*(float)M_PI * 1000.0f);
 
 
       checkEmergencyStopTimeout();
@@ -384,6 +401,8 @@ LOG_ADD(LOG_FLOAT, ta, &theta)
 LOG_ADD(LOG_FLOAT, a1, &angle1)
 LOG_ADD(LOG_FLOAT, xe, &x_err)
 LOG_ADD(LOG_FLOAT, ye, &y_err)
+LOG_ADD(LOG_FLOAT, aer, &angle_err)
+
 
 STATS_CNT_RATE_LOG_ADD(rtStab, &stabilizerRate)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
@@ -430,7 +449,7 @@ LOG_ADD(LOG_FLOAT, z, &sensorData.mag.z)
 LOG_GROUP_STOP(mag)
 
 LOG_GROUP_START(controller)
-LOG_ADD(LOG_INT16, ctr_yaw, &control.yaw)
+LOG_ADD(LOG_INT16, ctr_yaw, &control2.yaw)
 LOG_GROUP_STOP(controller)
 
 LOG_GROUP_START(stateEstimate)
