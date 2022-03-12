@@ -54,6 +54,15 @@
 #include "static_mem.h"
 #include "rateSupervisor.h"
 
+
+//my code servo control..start
+static uint8_t servoRatio_stabilizer = 243;
+uint8_t getservoRatio()
+{
+  return servoRatio_stabilizer;
+}
+//my code servo control..end
+
 static bool isInit;
 static bool emergencyStop = false;
 static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
@@ -291,6 +300,15 @@ static void stabilizerTask(void* param)
       collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
 
       controller(&control, &setpoint, &sensorData, &state, tick);
+
+      if (tick % 100 == 0){
+        if (state.attitude.roll >= (float)0.0){
+          servoRatio_stabilizer=243;
+        }
+        else{
+          servoRatio_stabilizer=230;
+        }
+      }
 
       checkEmergencyStopTimeout();
 

@@ -33,6 +33,8 @@
 
 #define EMERGENCY_STOP_TIMEOUT_DISABLED (-1)
 
+uint8_t getservoRatio(); // a function to send value to servo
+
 /**
  * Initialize the stabilizer subsystem and launch the stabilizer loop task.
  * The stabilizer loop task will wait on systemWaitStart() before running.
