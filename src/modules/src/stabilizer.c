@@ -143,19 +143,24 @@ static void calcSensorToOutputLatency(const sensorData_t *sensorData)
   inToOutLatency = outTimestamp - sensorData->interruptTimestamp;
 }
 
+static void compressState2() //my customized code
+{
+  stateCompressed.az = (sensorData.acc.z - 1) * 9.81f * 1000.0f;
+}
+
 static void compressState()
 {
-  stateCompressed.x = state.position.x * 1000.0f;
-  stateCompressed.y = state.position.y * 1000.0f;
-  stateCompressed.z = state.position.z * 1000.0f;
+  // stateCompressed.x = state.position.x * 1000.0f;
+  // stateCompressed.y = state.position.y * 1000.0f;
+  // stateCompressed.z = state.position.z * 1000.0f;
 
-  stateCompressed.vx = state.velocity.x * 1000.0f;
-  stateCompressed.vy = state.velocity.y * 1000.0f;
-  stateCompressed.vz = state.velocity.z * 1000.0f;
+  // stateCompressed.vx = state.velocity.x * 1000.0f;
+  // stateCompressed.vy = state.velocity.y * 1000.0f;
+  // stateCompressed.vz = state.velocity.z * 1000.0f;
 
-  stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
-  stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
-  stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
+  // stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
+  // stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
+  // stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
 
   float const q[4] = {
     state.attitudeQuaternion.x,
@@ -164,26 +169,24 @@ static void compressState()
     state.attitudeQuaternion.w};
   stateCompressed.quat = quatcompress(q);
 
-  float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
-  stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
-  stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
-  stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
+  // float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
+  // stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
+  // stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
+  // stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
-static void compressSetpoint()
-{
-  setpointCompressed.x = setpoint.position.x * 1000.0f;
-  setpointCompressed.y = setpoint.position.y * 1000.0f;
-  setpointCompressed.z = setpoint.position.z * 1000.0f;
-
-  setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
-  setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
-  setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
-
-  setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
-  setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
-  setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
-}
+// static void compressSetpoint()
+// {
+//   setpointCompressed.x = setpoint.position.x * 1000.0f;
+//   setpointCompressed.y = setpoint.position.y * 1000.0f;
+//   setpointCompressed.z = setpoint.position.z * 1000.0f;
+//   setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
+//   setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
+//   setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
+//   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
+//   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
+//   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
+// }
 
 void stabilizerInit(StateEstimatorType estimator)
 {
@@ -283,9 +286,10 @@ static void stabilizerTask(void* param)
 
       stateEstimator(&state, &sensorData, &control, tick);
       compressState();
+      compressState2();
 
       commanderGetSetpoint(&setpoint, &state);
-      compressSetpoint();
+      // compressSetpoint();
 
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
       collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
@@ -293,6 +297,7 @@ static void stabilizerTask(void* param)
       controller(&control, &setpoint, &sensorData, &state, tick);
 
       checkEmergencyStopTimeout();
+      stabilizerResetEmergencyStop();
 
       checkStops = systemIsArmed();
       if (emergencyStop || (systemIsArmed() == false)) {
