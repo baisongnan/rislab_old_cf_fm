@@ -251,6 +251,8 @@ static void compressState()
   // stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
   // stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
   // stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
+  stateCompressed.ax = sensorData.acc.x * 9.81f * 1000.0f;
+  stateCompressed.ay = sensorData.acc.y * 9.81f * 1000.0f;
   stateCompressed.az = (sensorData.acc.z - 1) * 9810.0f;
 
   float const q[4] = {
@@ -260,9 +262,9 @@ static void compressState()
       state.attitudeQuaternion.w};
   stateCompressed.quat = quatcompress(q);
 
-  // float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
-  // stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
-  // stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
+  float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
+  stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
+  stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
   // stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
@@ -290,7 +292,7 @@ void stabilizerInit(StateEstimatorType estimator)
   powerDistributionInit();
   sitAwInit();
   // collisionAvoidanceInit();
-  estimatorType = getStateEstimator();
+  estimatorType = 1;
   controllerType = getControllerType();
 
   STATIC_MEM_TASK_CREATE(stabilizerTask, stabilizerTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
