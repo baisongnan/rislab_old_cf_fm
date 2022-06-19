@@ -251,8 +251,8 @@ static void compressState()
   // stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
   // stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
   // stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
-  stateCompressed.ax = sensorData.acc.x * 9.81f * 1000.0f;
-  stateCompressed.ay = sensorData.acc.y * 9.81f * 1000.0f;
+  stateCompressed.ax = sensorData.acc.x * 9810f;
+  stateCompressed.ay = sensorData.acc.y * 9810f;
   stateCompressed.az = (sensorData.acc.z - 1) * 9810.0f;
 
   float const q[4] = {
