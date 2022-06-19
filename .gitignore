@@ -26,3 +26,5 @@ current_platform.mk
 docs/.jekyll-cache
 
 .DS_Store
+
+vendor/CMSIS
