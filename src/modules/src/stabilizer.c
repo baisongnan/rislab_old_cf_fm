@@ -414,14 +414,14 @@ static void stabilizerTask(void *param)
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
       controller(&control, &setpoint, &sensorData, &state, tick);
 
-      // if (tick % 10 == 0){
-      //   if (control.thrust < 2000){
-      //     servoRatio_stabilizer=243;
-      //   }
-      //   else{
-      //     servoRatio_stabilizer=230;
-      //   }
-      // }
+      if (tick % 10 == 0){
+        if (state.attitude.roll  < 5.0f){
+          servoRatio_stabilizer=243;
+        }
+        else{
+          servoRatio_stabilizer=230;
+        }
+      }
 
       // controller_vector(control_kp, control_kd, control_kdz,
       //                   state.attitudeQuaternion.w, 
@@ -737,7 +737,9 @@ PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
 PARAM_ADD(PARAM_FLOAT, acl, &attitude_control_limit)
 PARAM_ADD(PARAM_INT16, fr, &flip_roll)
 PARAM_ADD(PARAM_INT16, frb, &flip_roll_stop)
-PARAM_ADD(PARAM_UINT8, servo, &servoRatio_stabilizer)
+
+
+
 
 // PARAM_ADD(PARAM_FLOAT, kp, &control_kp)
 // PARAM_ADD(PARAM_FLOAT, kd, &control_kd)
@@ -795,6 +797,9 @@ LOG_ADD(LOG_FLOAT, roll, &state.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &state.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &state.attitude.yaw)
 LOG_ADD(LOG_FLOAT, thrust, &control.thrust)
+LOG_ADD(LOG_UINT8, servo, &servoRatio_stabilizer)
+
+
 
 STATS_CNT_RATE_LOG_ADD(rtStab, &stabilizerRate)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
