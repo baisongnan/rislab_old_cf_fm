@@ -414,14 +414,26 @@ static void stabilizerTask(void *param)
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
       controller(&control, &setpoint, &sensorData, &state, tick);
 
-      if (tick % 10 == 0){
-        if (state.attitude.roll  < 5.0f){
-          servoRatio_stabilizer=243;
-        }
-        else{
-          servoRatio_stabilizer=230;
-        }
+      // if (tick % 10 == 0){
+      //   if (state.attitude.roll  < 5.0f){
+      //     servoRatio_stabilizer=243;
+      //   }
+      //   else{
+      //     servoRatio_stabilizer=230;
+      //   }
+      // }
+
+      if (setpoint.attitudeRate.yaw > 180.0f) 
+      {
+        servoRatio_stabilizer=243;
+        setpoint.attitudeRate.yaw = 0.0f;
       }
+      else if (setpoint.attitudeRate.yaw < -180.0f) 
+      {
+        servoRatio_stabilizer=230;
+        setpoint.attitudeRate.yaw = 0.0f;
+      }
+
 
       // controller_vector(control_kp, control_kd, control_kdz,
       //                   state.attitudeQuaternion.w, 
