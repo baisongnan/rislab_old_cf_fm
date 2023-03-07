@@ -45,10 +45,10 @@
 #include "sitaw.h"
 #include "controller.h"
 #include "power_distribution.h"
-#include "collision_avoidance.h"
+// #include "collision_avoidance.h"
 
 #include "estimator.h"
-#include "usddeck.h"
+// #include "usddeck.h"
 #include "quatcompress.h"
 #include "statsCnt.h"
 #include "static_mem.h"
@@ -65,7 +65,7 @@ uint8_t getservoRatio()
 
 static bool isInit;
 static bool emergencyStop = false;
-static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
+// static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
 
 static bool checkStops;
 
@@ -154,17 +154,21 @@ static void calcSensorToOutputLatency(const sensorData_t *sensorData)
 
 static void compressState()
 {
-  stateCompressed.x = state.position.x * 1000.0f;
-  stateCompressed.y = state.position.y * 1000.0f;
-  stateCompressed.z = state.position.z * 1000.0f;
+  // stateCompressed.x = state.position.x * 1000.0f;
+  // stateCompressed.y = state.position.y * 1000.0f;
+  // stateCompressed.z = state.position.z * 1000.0f;
 
-  stateCompressed.vx = state.velocity.x * 1000.0f;
-  stateCompressed.vy = state.velocity.y * 1000.0f;
-  stateCompressed.vz = state.velocity.z * 1000.0f;
+  // stateCompressed.vx = state.velocity.x * 1000.0f;
+  // stateCompressed.vy = state.velocity.y * 1000.0f;
+  // stateCompressed.vz = state.velocity.z * 1000.0f;
 
-  stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
-  stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
-  stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
+  // stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
+  // stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
+  // stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
+
+  stateCompressed.ax = sensorData.acc.x * 9810.0f;
+  stateCompressed.ay = sensorData.acc.y * 9810.0f;
+  stateCompressed.az = (sensorData.acc.z - 1) * 9810.0f;
 
   float const q[4] = {
     state.attitudeQuaternion.x,
@@ -179,20 +183,20 @@ static void compressState()
   stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
-static void compressSetpoint()
-{
-  setpointCompressed.x = setpoint.position.x * 1000.0f;
-  setpointCompressed.y = setpoint.position.y * 1000.0f;
-  setpointCompressed.z = setpoint.position.z * 1000.0f;
+// static void compressSetpoint()
+// {
+//   setpointCompressed.x = setpoint.position.x * 1000.0f;
+//   setpointCompressed.y = setpoint.position.y * 1000.0f;
+//   setpointCompressed.z = setpoint.position.z * 1000.0f;
 
-  setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
-  setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
-  setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
+//   setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
+//   setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
+//   setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
 
-  setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
-  setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
-  setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
-}
+//   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
+//   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
+//   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
+// }
 
 void stabilizerInit(StateEstimatorType estimator)
 {
@@ -204,7 +208,7 @@ void stabilizerInit(StateEstimatorType estimator)
   controllerInit(ControllerTypeAny);
   powerDistributionInit();
   sitAwInit();
-  collisionAvoidanceInit();
+  // collisionAvoidanceInit();
   estimatorType = getStateEstimator();
   controllerType = getControllerType();
 
@@ -221,21 +225,21 @@ bool stabilizerTest(void)
   pass &= stateEstimatorTest();
   pass &= controllerTest();
   pass &= powerDistributionTest();
-  pass &= collisionAvoidanceTest();
+  // pass &= collisionAvoidanceTest();
 
   return pass;
 }
 
-static void checkEmergencyStopTimeout()
-{
-  if (emergencyStopTimeout >= 0) {
-    emergencyStopTimeout -= 1;
+// static void checkEmergencyStopTimeout()
+// {
+//   if (emergencyStopTimeout >= 0) {
+//     emergencyStopTimeout -= 1;
 
-    if (emergencyStopTimeout == 0) {
-      emergencyStop = true;
-    }
-  }
-}
+//     if (emergencyStopTimeout == 0) {
+//       emergencyStop = true;
+//     }
+//   }
+// }
 
 /* The stabilizer loop runs at 1kHz (stock) or 500Hz (kalman). It is the
  * responsibility of the different functions to run slower by skipping call
@@ -294,10 +298,10 @@ static void stabilizerTask(void* param)
       compressState();
 
       commanderGetSetpoint(&setpoint, &state);
-      compressSetpoint();
+      // compressSetpoint();
 
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
-      collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
+      // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
 
       controller(&control, &setpoint, &sensorData, &state, tick);
 
@@ -310,10 +314,11 @@ static void stabilizerTask(void* param)
       //   }
       // }
 
-      checkEmergencyStopTimeout();
+      // checkEmergencyStopTimeout();
 
       checkStops = systemIsArmed();
-      if (emergencyStop || (systemIsArmed() == false)) {
+      // if (emergencyStop || (systemIsArmed() == false)) {
+      if (systemIsArmed() == false) {
         powerStop();
       } else {
         powerDistribution(&control);
@@ -349,11 +354,11 @@ void stabilizerResetEmergencyStop()
   emergencyStop = false;
 }
 
-void stabilizerSetEmergencyStopTimeout(int timeout)
-{
-  emergencyStop = false;
-  emergencyStopTimeout = timeout;
-}
+// void stabilizerSetEmergencyStopTimeout(int timeout)
+// {
+//   emergencyStop = false;
+//   emergencyStopTimeout = timeout;
+// }
 
 static float variance(float *buffer, uint32_t length)
 {

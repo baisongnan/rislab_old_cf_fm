@@ -275,7 +275,7 @@ static void genericLocHandle(CRTPPacket* pk)
       stabilizerSetEmergencyStop();
       break;
     case EMERGENCY_STOP_WATCHDOG:
-      stabilizerSetEmergencyStopTimeout(DEFAULT_EMERGENCY_STOP_TIMEOUT);
+      // stabilizerSetEmergencyStopTimeout(DEFAULT_EMERGENCY_STOP_TIMEOUT);
       break;
     case EXT_POSE:
       extPoseHandler(pk);

@@ -64,7 +64,7 @@ void stabilizerResetEmergencyStop();
  * @param timeout Timeout in stabilizer loop tick. The stabilizer loop rate is
  *                RATE_MAIN_LOOP.
  */
-void stabilizerSetEmergencyStopTimeout(int timeout);
+// void stabilizerSetEmergencyStopTimeout(int timeout);
 
 
 #endif /* STABILIZER_H_ */
