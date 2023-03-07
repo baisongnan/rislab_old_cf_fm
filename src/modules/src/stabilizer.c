@@ -319,12 +319,12 @@ static void stabilizerTask(void* param)
         powerDistribution(&control);
       }
 
-      // Log data to uSD card if configured
-      if (   usddeckLoggingEnabled()
-          && usddeckLoggingMode() == usddeckLoggingMode_SynchronousStabilizer
-          && RATE_DO_EXECUTE(usddeckFrequency(), tick)) {
-        usddeckTriggerLogging();
-      }
+      // // Log data to uSD card if configured
+      // if (   usddeckLoggingEnabled()
+      //     && usddeckLoggingMode() == usddeckLoggingMode_SynchronousStabilizer
+      //     && RATE_DO_EXECUTE(usddeckFrequency(), tick)) {
+      //   usddeckTriggerLogging();
+      // }
     }
     calcSensorToOutputLatency(&sensorData);
     tick++;
