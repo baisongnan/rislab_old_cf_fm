@@ -59,7 +59,7 @@
 
 static bool isInit;
 static xTimerHandle timer;
-static uint8_t ratio = 237; // ~ 1.5ms pulse width (= neutral position)
+// static uint8_t ratio = 237; // ~ 1.5ms pulse width (= neutral position)
 // static uint8_t ratio = getservoRatio(); // ~ 1.5ms pulse width (= neutral position)
 
 // measured:
@@ -167,6 +167,6 @@ PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, bcServo, &isInit)
 PARAM_GROUP_STOP(deck)
 
 PARAM_GROUP_START(servo)
-PARAM_ADD(PARAM_UINT8, ratio, &ratio)
+// PARAM_ADD(PARAM_UINT8, ratio, &ratio)
 PARAM_ADD(PARAM_UINT16, freq, &freq)
 PARAM_GROUP_STOP(servo)

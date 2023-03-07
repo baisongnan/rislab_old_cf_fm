@@ -301,14 +301,14 @@ static void stabilizerTask(void* param)
 
       controller(&control, &setpoint, &sensorData, &state, tick);
 
-      if (tick % 100 == 0){
-        if (state.attitude.roll >= (float)0.0){
-          servoRatio_stabilizer=243;
-        }
-        else{
-          servoRatio_stabilizer=230;
-        }
-      }
+      // if (tick % 100 == 0){
+      //   if (state.attitude.roll >= (float)0.0){
+      //     servoRatio_stabilizer=243;
+      //   }
+      //   else{
+      //     servoRatio_stabilizer=230;
+      //   }
+      // }
 
       checkEmergencyStopTimeout();
 
@@ -570,6 +570,9 @@ PARAM_GROUP_START(stabilizer)
 PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
+PARAM_ADD(PARAM_UINT8, servo, &servoRatio_stabilizer)
+
+
 PARAM_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(health)
