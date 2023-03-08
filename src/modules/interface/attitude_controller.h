@@ -30,6 +30,18 @@
 #include <stdbool.h>
 #include "commander.h"
 
+// inline int16_t saturateSignedInt16(float in);
+
+// inline int16_t saturateSignedInt16(float in)
+// {
+//   // don't use INT16_MIN, because later we may negate it, which won't work for that value.
+//   if (in > INT16_MAX)
+//     return INT16_MAX;
+//   else if (in < -INT16_MAX)
+//     return -INT16_MAX;
+//   else
+//     return (int16_t)in;
+// }
 
 void attitudeControllerInit(const float updateDt);
 bool attitudeControllerTest(void);

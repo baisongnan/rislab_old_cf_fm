@@ -26,6 +26,7 @@
 #define DEBUG_MODULE "STAB"
 
 #include <math.h>
+#include <math3d.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -53,19 +54,34 @@
 #include "statsCnt.h"
 #include "static_mem.h"
 #include "rateSupervisor.h"
+#include "attitude_controller.h"
 
 
 //my code servo control..start
-static uint8_t servoRatio_stabilizer = 243;
+static uint8_t servoRatio_stabilizer = 244;
 uint8_t getservoRatio()
 {
   return servoRatio_stabilizer;
 }
 //my code servo control..end
 
+static float ki_roll = 50;
+static float kp_roll = 750; //1500
+static float kd_roll = 250;//500
+static float ki_pitch = 50;
+static float kp_pitch = 750; //1000
+static float kd_pitch = 250; //500
+// static float kp_yaw = 10; //100
+static float kd_yaw = 100;//100
+
+static float error_roll_int = 0.0f;
+static float error_pitch_int = 0.0f;
+
 static bool isInit;
 static bool emergencyStop = false;
 // static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
+static float stand_thrust_threshold = 1000.0f;
+static float stand_mgl = 55000.0f;
 
 static bool checkStops;
 
@@ -115,20 +131,20 @@ static struct {
   int16_t rateYaw;
 } stateCompressed;
 
-static struct {
-  // position - mm
-  int16_t x;
-  int16_t y;
-  int16_t z;
-  // velocity - mm / sec
-  int16_t vx;
-  int16_t vy;
-  int16_t vz;
-  // acceleration - mm / sec^2
-  int16_t ax;
-  int16_t ay;
-  int16_t az;
-} setpointCompressed;
+// static struct {
+//   // position - mm
+//   int16_t x;
+//   int16_t y;
+//   int16_t z;
+//   // velocity - mm / sec
+//   int16_t vx;
+//   int16_t vy;
+//   int16_t vz;
+//   // acceleration - mm / sec^2
+//   int16_t ax;
+//   int16_t ay;
+//   int16_t az;
+// } setpointCompressed;
 
 static float accVarX[NBR_OF_MOTORS];
 static float accVarY[NBR_OF_MOTORS];
@@ -188,11 +204,9 @@ static void compressState()
 //   setpointCompressed.x = setpoint.position.x * 1000.0f;
 //   setpointCompressed.y = setpoint.position.y * 1000.0f;
 //   setpointCompressed.z = setpoint.position.z * 1000.0f;
-
 //   setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
 //   setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
 //   setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
-
 //   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
 //   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
 //   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
@@ -234,7 +248,6 @@ bool stabilizerTest(void)
 // {
 //   if (emergencyStopTimeout >= 0) {
 //     emergencyStopTimeout -= 1;
-
 //     if (emergencyStopTimeout == 0) {
 //       emergencyStop = true;
 //     }
@@ -303,7 +316,17 @@ static void stabilizerTask(void* param)
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
 
-      controller(&control, &setpoint, &sensorData, &state, tick);
+      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 10.0f)
+      { 
+        ;
+      }
+      else
+      {
+        controller(&control, &setpoint, &sensorData, &state, tick);
+        error_roll_int = 0.0f;
+        error_pitch_int = 0.0f;
+      }
+      
 
       // if (tick % 100 == 0){
       //   if (state.attitude.roll >= (float)0.0){
@@ -315,6 +338,43 @@ static void stabilizerTask(void* param)
       // }
 
       // checkEmergencyStopTimeout();
+
+      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 10.0f)
+      { 
+        float error_roll = setpoint.attitude.roll - state.attitude.roll;
+        float error_pitch = setpoint.attitude.pitch - state.attitude.pitch;
+        error_roll_int = error_roll_int + error_roll * 0.001f;
+        error_pitch_int = error_pitch_int + error_pitch * 0.001f;
+
+        float pitch_temp = - state.attitude.pitch / 180 * M_PI_F;
+        float tau_x = (kp_roll*error_roll + kd_roll*(- sensorData.gyro.x) + ki_roll*error_roll_int) - stand_mgl * cosf(pitch_temp) * sinf(state.attitude.roll / 180 * M_PI_F);
+        float tau_y = (kp_pitch*error_pitch + kd_pitch*(sensorData.gyro.y) + ki_pitch*error_pitch_int) + stand_mgl * sinf(pitch_temp);
+        float tau_z = - kd_yaw*(setpoint.attitudeRate.yaw - sensorData.gyro.z);
+
+        if (tau_z > 32000.0f) 
+          tau_z = 32000.0f;
+        if (tau_z < -32000.0f) 
+          tau_z = -32000.0f;
+
+        if (tau_x > 32000.0f) 
+          tau_x = 32000.0f;
+        if (tau_x < -32000.0f)
+          tau_x = -32000.0f;
+
+        if (tau_y > 32000.0f) 
+          tau_y = 32000.0f;
+        if (tau_y < -32000.0f)
+          tau_y = -32000.0f;
+
+        //saturation needed here
+        // control.thrust = 1000.0f;
+        // control.yaw = 0.0f;
+
+        control.thrust = 1000.0f;
+        control.pitch = (int16_t)tau_y;
+        control.roll = (int16_t)tau_x;
+        control.yaw = (int16_t)tau_z;
+      }
 
       checkStops = systemIsArmed();
       // if (emergencyStop || (systemIsArmed() == false)) {
@@ -576,7 +636,17 @@ PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
 PARAM_ADD(PARAM_UINT8, servo, &servoRatio_stabilizer)
+PARAM_ADD(PARAM_FLOAT, stt, &stand_thrust_threshold)
+PARAM_ADD(PARAM_FLOAT, mgl, &stand_mgl)
 
+
+PARAM_ADD(PARAM_FLOAT, kir, &ki_roll)
+PARAM_ADD(PARAM_FLOAT, kpr, &kp_roll)
+PARAM_ADD(PARAM_FLOAT, kdr, &kd_roll)
+PARAM_ADD(PARAM_FLOAT, kip, &ki_pitch)
+PARAM_ADD(PARAM_FLOAT, kpp, &kp_pitch)
+PARAM_ADD(PARAM_FLOAT, kdp, &kd_pitch)
+PARAM_ADD(PARAM_FLOAT, kdy, &kd_yaw)
 
 PARAM_GROUP_STOP(stabilizer)
 
@@ -612,19 +682,19 @@ LOG_ADD(LOG_FLOAT, pitch, &setpoint.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &setpoint.attitudeRate.yaw)
 LOG_GROUP_STOP(ctrltarget)
 
-LOG_GROUP_START(ctrltargetZ)
-LOG_ADD(LOG_INT16, x, &setpointCompressed.x)   // position - mm
-LOG_ADD(LOG_INT16, y, &setpointCompressed.y)
-LOG_ADD(LOG_INT16, z, &setpointCompressed.z)
+// LOG_GROUP_START(ctrltargetZ)
+// LOG_ADD(LOG_INT16, x, &setpointCompressed.x)   // position - mm
+// LOG_ADD(LOG_INT16, y, &setpointCompressed.y)
+// LOG_ADD(LOG_INT16, z, &setpointCompressed.z)
 
-LOG_ADD(LOG_INT16, vx, &setpointCompressed.vx) // velocity - mm / sec
-LOG_ADD(LOG_INT16, vy, &setpointCompressed.vy)
-LOG_ADD(LOG_INT16, vz, &setpointCompressed.vz)
+// LOG_ADD(LOG_INT16, vx, &setpointCompressed.vx) // velocity - mm / sec
+// LOG_ADD(LOG_INT16, vy, &setpointCompressed.vy)
+// LOG_ADD(LOG_INT16, vz, &setpointCompressed.vz)
 
-LOG_ADD(LOG_INT16, ax, &setpointCompressed.ax) // acceleration - mm / sec^2
-LOG_ADD(LOG_INT16, ay, &setpointCompressed.ay)
-LOG_ADD(LOG_INT16, az, &setpointCompressed.az)
-LOG_GROUP_STOP(ctrltargetZ)
+// LOG_ADD(LOG_INT16, ax, &setpointCompressed.ax) // acceleration - mm / sec^2
+// LOG_ADD(LOG_INT16, ay, &setpointCompressed.ay)
+// LOG_ADD(LOG_INT16, az, &setpointCompressed.az)
+// LOG_GROUP_STOP(ctrltargetZ)
 
 LOG_GROUP_START(stabilizer)
 LOG_ADD(LOG_FLOAT, roll, &state.attitude.roll)
