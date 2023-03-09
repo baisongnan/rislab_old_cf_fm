@@ -63,6 +63,9 @@ uint8_t getservoRatio()
 {
   return servoRatio_stabilizer;
 }
+static uint8_t servoRatio_stop = 244;
+static uint8_t servoRatio_spin = 240;
+static float jump_test_threshold = 1050.0f;
 //my code servo control..end
 
 static float ki_roll = 50;
@@ -316,7 +319,7 @@ static void stabilizerTask(void* param)
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
 
-      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 10.0f)
+      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f)
       { 
         ;
       }
@@ -339,8 +342,19 @@ static void stabilizerTask(void* param)
 
       // checkEmergencyStopTimeout();
 
-      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 10.0f)
+      // standing control
+      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f)
       { 
+        // jumping motor test
+        if (fabsf(setpoint.thrust - jump_test_threshold) <= 1.0f)
+        {
+          servoRatio_stabilizer = servoRatio_spin;
+        }
+        else
+        {
+          servoRatio_stabilizer = servoRatio_stop;
+        }
+
         float error_roll = setpoint.attitude.roll - state.attitude.roll;
         float error_pitch = setpoint.attitude.pitch - state.attitude.pitch;
         error_roll_int = error_roll_int + error_roll * 0.001f;
@@ -374,6 +388,10 @@ static void stabilizerTask(void* param)
         control.pitch = (int16_t)tau_y;
         control.roll = (int16_t)tau_x;
         control.yaw = (int16_t)tau_z;
+      }
+      else
+      {
+        servoRatio_stabilizer = servoRatio_stop;
       }
 
       checkStops = systemIsArmed();
@@ -635,10 +653,9 @@ PARAM_GROUP_START(stabilizer)
 PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
-PARAM_ADD(PARAM_UINT8, servo, &servoRatio_stabilizer)
+// PARAM_ADD(PARAM_UINT8, servo, &servoRatio_stabilizer)
 PARAM_ADD(PARAM_FLOAT, stt, &stand_thrust_threshold)
 PARAM_ADD(PARAM_FLOAT, mgl, &stand_mgl)
-
 
 PARAM_ADD(PARAM_FLOAT, kir, &ki_roll)
 PARAM_ADD(PARAM_FLOAT, kpr, &kp_roll)
@@ -648,6 +665,9 @@ PARAM_ADD(PARAM_FLOAT, kpp, &kp_pitch)
 PARAM_ADD(PARAM_FLOAT, kdp, &kd_pitch)
 PARAM_ADD(PARAM_FLOAT, kdy, &kd_yaw)
 
+PARAM_ADD(PARAM_FLOAT, jtt, &jump_test_threshold)
+PARAM_ADD(PARAM_UINT8, srst, &servoRatio_stop)
+PARAM_ADD(PARAM_UINT8, srsp, &servoRatio_spin)
 PARAM_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(health)
