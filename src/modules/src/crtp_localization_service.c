@@ -48,6 +48,7 @@
 #include "peer_localization.h"
 
 #include "num.h"
+#include "sensfusion6.h"
 
 #define NBR_OF_RANGES_IN_PACKET   5
 #define NBR_OF_SWEEPS_IN_PACKET   2
@@ -179,7 +180,9 @@ static void extPoseHandler(const CRTPPacket* pk) {
   ext_pose.stdDevPos = extPosStdDev;
   ext_pose.stdDevQuat = extQuatStdDev;
 
-  estimatorEnqueuePose(&ext_pose);
+  // estimatorEnqueuePose(&ext_pose);
+  // send these data to sensfusion6
+  setquat(data->qw, data->qx, data->qy, data->qz);
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -194,14 +197,14 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
       ext_pose.stdDevQuat = extQuatStdDev;
-      estimatorEnqueuePose(&ext_pose);
+      // estimatorEnqueuePose(&ext_pose);
       tickOfLastPacket = xTaskGetTickCount();
     } else {
       ext_pos.x = item->x / 1000.0f;
       ext_pos.y = item->y / 1000.0f;
       ext_pos.z = item->z / 1000.0f;
       ext_pos.stdDev = extPosStdDev;
-      peerLocalizationTellPosition(item->id, &ext_pos);
+      // peerLocalizationTellPosition(item->id, &ext_pos);
     }
   }
 }
@@ -272,7 +275,7 @@ static void genericLocHandle(CRTPPacket* pk)
       lpsShortLppPacketHandler(pk);
       break;
     case EMERGENCY_STOP:
-      stabilizerSetEmergencyStop();
+      // stabilizerSetEmergencyStop();
       break;
     case EMERGENCY_STOP_WATCHDOG:
       // stabilizerSetEmergencyStopTimeout(DEFAULT_EMERGENCY_STOP_TIMEOUT);

@@ -344,11 +344,11 @@ static void stabilizerTask(void *param)
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
 
-      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f)
+      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f)  // standing control
       {
         ;
       }
-      else
+      else  // hopping
       {
         controller(&control, &setpoint, &sensorData, &state, tick);
         error_roll_int = 0.0f;
@@ -368,44 +368,6 @@ static void stabilizerTask(void *param)
 
       if (fabsf(setpoint.thrust - hopping_thrust_threshold) <= 100.0f) // hopping
       {
-        // float error_roll = setpoint.attitude.roll - state.attitude.roll;
-        // float error_pitch = setpoint.attitude.pitch - state.attitude.pitch;
-        // // error_roll_int = error_roll_int + error_roll * 0.001f;
-        // // error_pitch_int = error_pitch_int + error_pitch * 0.001f;
-
-        // // float pitch_temp = -state.attitude.pitch / 180 * M_PI_F;
-        // float tau_x = (kp_roll * error_roll + kd_roll * (-sensorData.gyro.x));
-        // float tau_y = (kp_pitch * error_pitch + kd_pitch * (sensorData.gyro.y)) ;
-        // float tau_z = -kd_yaw * (setpoint.attitudeRate.yaw - sensorData.gyro.z);
-
-        // if (tau_z > 32000.0f)
-        //   tau_z = 32000.0f;
-        // if (tau_z < -32000.0f)
-        //   tau_z = -32000.0f;
-
-        // if (tau_x > 32000.0f)
-        //   tau_x = 32000.0f;
-        // if (tau_x < -32000.0f)
-        //   tau_x = -32000.0f;
-
-        // if (tau_y > 32000.0f)
-        //   tau_y = 32000.0f;
-        // if (tau_y < -32000.0f)
-        //   tau_y = -32000.0f;
-
-        // // saturation needed here
-        // //  control.thrust = 1000.0f;
-        // //  control.yaw = 0.0f;
-
-        control.thrust = 300.0f;
-        // control.pitch = (int16_t)tau_y;
-        // control.roll = (int16_t)tau_x;
-        // control.yaw = (int16_t)tau_z;
-        
-        // control.pitch = 0;
-        // control.roll = 0;
-        // control.yaw = 0;
-
         if (leg_motor_flag)
         {
           servoRatio_stabilizer = servoRatio_spin;
@@ -530,15 +492,15 @@ static void stabilizerTask(void *param)
   }
 }
 
-void stabilizerSetEmergencyStop()
-{
-  emergencyStop = true;
-}
+// void stabilizerSetEmergencyStop()
+// {
+//   emergencyStop = true;
+// }
 
-void stabilizerResetEmergencyStop()
-{
-  emergencyStop = false;
-}
+// void stabilizerResetEmergencyStop()
+// {
+//   emergencyStop = false;
+// }
 
 // void stabilizerSetEmergencyStopTimeout(int timeout)
 // {
