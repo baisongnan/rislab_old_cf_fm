@@ -62,6 +62,8 @@ uint8_t getservoRatio()
 {
   return servoRatio_stabilizer;
 }
+static uint8_t servo_test = 244;
+static uint8_t servo_test_flag = 0;
 static uint8_t servoRatio_stop = 244;
 static uint8_t servoRatio_spin = 240;
 static float jump_test_threshold = 1050.0f;
@@ -83,6 +85,7 @@ static bool isInit;
 static bool emergencyStop = false;
 // static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
 static float stand_thrust_threshold = 1000.0f;
+
 static float stand_mgl = 55000.0f;
 
 static float hopping_thrust_threshold = 1500.0f;
@@ -355,17 +358,6 @@ static void stabilizerTask(void *param)
         error_pitch_int = 0.0f;
       }
 
-      // if (tick % 100 == 0){
-      //   if (state.attitude.roll >= (float)0.0){
-      //     servoRatio_stabilizer=243;
-      //   }
-      //   else{
-      //     servoRatio_stabilizer=230;
-      //   }
-      // }
-
-      // checkEmergencyStopTimeout();
-
       if (fabsf(setpoint.thrust - hopping_thrust_threshold) <= 100.0f) // hopping
       {
         if (leg_motor_flag)
@@ -446,8 +438,8 @@ static void stabilizerTask(void *param)
         control.pitch = (int16_t)tau_y;
         control.roll = (int16_t)tau_x;
         control.yaw = (int16_t)tau_z;
-      }
-      else // not jump, not stand
+      }      
+      else if (setpoint.thrust < 10.0f)// not jump, not stand
       {
         leg_motor_flag = false;
         servoRatio_stabilizer = servoRatio_stop;
@@ -457,6 +449,12 @@ static void stabilizerTask(void *param)
       {
         leg_motor_flag = false;
         leg_motor_timer = 0;
+      }
+
+
+      if (servo_test_flag)
+      {
+        servoRatio_stabilizer = servo_test;
       }
 
       checkStops = systemIsArmed();
@@ -732,6 +730,8 @@ PARAM_ADD(PARAM_FLOAT, kpp, &kp_pitch)
 PARAM_ADD(PARAM_FLOAT, kdp, &kd_pitch)
 PARAM_ADD(PARAM_FLOAT, kdy, &kd_yaw)
 
+PARAM_ADD(PARAM_UINT8, st, &servo_test)
+PARAM_ADD(PARAM_UINT8, stf, &servo_test_flag)
 PARAM_ADD(PARAM_FLOAT, jtt, &jump_test_threshold)
 PARAM_ADD(PARAM_UINT8, srst, &servoRatio_stop)
 PARAM_ADD(PARAM_UINT8, srsp, &servoRatio_spin)
