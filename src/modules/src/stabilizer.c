@@ -45,7 +45,7 @@
 #include "sitaw.h"
 #include "controller.h"
 #include "power_distribution.h"
-#include "collision_avoidance.h"
+// #include "collision_avoidance.h"
 
 #include "estimator.h"
 #include "usddeck.h"
@@ -54,13 +54,22 @@
 #include "static_mem.h"
 #include "rateSupervisor.h"
 
+
+//my code servo control..start
+static uint8_t servoRatio_stabilizer = 243;
+uint8_t getservoRatio()
+{
+  return servoRatio_stabilizer;
+}
+//my code servo control..end
+
 static bool isInit;
 static bool emergencyStop = false;
 static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
 
 static bool checkStops;
 
-#define PROPTEST_NBR_OF_VARIANCE_VALUES   100
+#define PROPTEST_NBR_OF_VARIANCE_VALUES 100
 static bool startPropTest = false;
 
 uint32_t inToOutLatency;
@@ -74,18 +83,40 @@ static control_t control;
 static StateEstimatorType estimatorType;
 static ControllerType controllerType;
 
-typedef enum { configureAcc, measureNoiseFloor, measureProp, testBattery, restartBatTest, evaluateResult, testDone } TestState;
+// ----- my variables start -----
+static float attitude_control_limit;
+bool thrust_flag;
+static int16_t flip_roll;
+static int16_t flip_roll_stop;
+// static float control_kp;
+// static float control_kd;
+// static float control_kdz;
+
+
+// ----- my variables end   -----
+
+typedef enum
+{
+  configureAcc,
+  measureNoiseFloor,
+  measureProp,
+  testBattery,
+  restartBatTest,
+  evaluateResult,
+  testDone
+} TestState;
 #ifdef RUN_PROP_TEST_AT_STARTUP
-  static TestState testState = configureAcc;
+static TestState testState = configureAcc;
 #else
-  static TestState testState = testDone;
+static TestState testState = testDone;
 #endif
 
 static STATS_CNT_RATE_DEFINE(stabilizerRate, 500);
 static rateSupervisor_t rateSupervisorContext;
 static bool rateWarningDisplayed = false;
 
-static struct {
+static struct
+{
   // position - mm
   int16_t x;
   int16_t y;
@@ -106,7 +137,8 @@ static struct {
   int16_t rateYaw;
 } stateCompressed;
 
-static struct {
+static struct
+{
   // position - mm
   int16_t x;
   int16_t y;
@@ -134,8 +166,79 @@ static uint16_t motorTestCount = 0;
 
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 
-static void stabilizerTask(void* param);
+static void stabilizerTask(void *param);
 static void testProps(sensorData_t *sensors);
+
+// ----- my functions start -----
+
+// float saturation_fcn(float x, float limit_up, float limit_down)
+// {
+//   if (x > limit_up)
+//   {
+//     x = limit_up;
+//   }
+//   else if (x < limit_down)
+//   {
+//     x = limit_down;
+//   }
+//   return x;
+// }
+
+// void controller_vector(float kp, float kd, float kdz, float w, float x, float y, float z,
+//                 float zx, float zy, float zz, float wx, float wy, float wz,
+//                 int16_t *tau_x, int16_t *tau_y, int16_t *tau_z )
+// {
+//   float w2;
+//   float x2;
+//   float xw;
+//   float xy;
+//   float xz;
+//   float y2;
+//   float yw;
+//   float yz;
+//   float z2;
+//   float zw;
+//   x2 = x * x;
+//   y2 = y * y;
+//   z2 = z * z;
+//   w2 = w * w;
+//   xy = x * y;
+//   zw = z * w;
+//   xz = x * z;
+//   yw = y * w;
+//   yz = y * z;
+//   xw = x * w;
+//   float R11 = x2 - y2 - z2 + w2;
+//   float R21 = 2 * (xy + zw);
+//   float R31 = 2 * (xz - yw);
+//   float R12 = 2 * (xy - zw);
+//   float R22 = - x2 + y2 - z2 + w2;
+//   float R32 = 2 * (yz + xw);
+//   float R13 = 2.0F * (xz + yw);
+//   float R23 = 2.0F * (yz - xw);
+//   float R33 = ((-x2 - y2) + z2) + w2;
+//   float dir_idx_0 = R23 * zz - zy * R33;
+//   float dir_idx_1 = zx * R33 - R13 * zz;
+//   float dir_idx_2 = R13 * zy - zx * R23;
+//   float norm_dir = sqrtf(dir_idx_0 * dir_idx_0 + dir_idx_1 * dir_idx_1 + dir_idx_2 * dir_idx_2);
+//   float angle_kp = kp * atan2f(norm_dir, (R13*zx + R23*zy + R33*zz));
+//   float unit_dir_1 = 1.0f;
+//   float unit_dir_2 = 0.0f;
+//   float unit_dir_3 = 0.0f;
+//   if (fabsf(norm_dir) > 1e-7f)
+//   {
+//     unit_dir_1 = dir_idx_0 / norm_dir;
+//     unit_dir_2 = dir_idx_1 / norm_dir;
+//     unit_dir_3 = dir_idx_2 / norm_dir;
+//   }
+//   float tau_x_kp = (R11*unit_dir_1 + R21*unit_dir_2 + R31*unit_dir_3)*angle_kp;
+//   float tau_y_kp = - (R12*unit_dir_1 + R22*unit_dir_2 + R32*unit_dir_3)*angle_kp;
+//   *tau_x = (int16_t)saturation_fcn(tau_x_kp + kd * wx, 20000.0f, - 20000.0f);
+//   *tau_y = (int16_t)saturation_fcn(tau_y_kp + kd * wy, 20000.0f, - 20000.0f);
+//   *tau_z = (int16_t)saturation_fcn(+ kdz * wz, 20000.0f, - 20000.0f);
+// }
+
+// ----- my functions end   -----
 
 static void calcSensorToOutputLatency(const sensorData_t *sensorData)
 {
@@ -143,51 +246,53 @@ static void calcSensorToOutputLatency(const sensorData_t *sensorData)
   inToOutLatency = outTimestamp - sensorData->interruptTimestamp;
 }
 
+
 static void compressState()
 {
-  stateCompressed.x = state.position.x * 1000.0f;
-  stateCompressed.y = state.position.y * 1000.0f;
-  stateCompressed.z = state.position.z * 1000.0f;
+  // stateCompressed.x = state.position.x * 1000.0f;
+  // stateCompressed.y = state.position.y * 1000.0f;
+  // stateCompressed.z = state.position.z * 1000.0f;
 
-  stateCompressed.vx = state.velocity.x * 1000.0f;
-  stateCompressed.vy = state.velocity.y * 1000.0f;
-  stateCompressed.vz = state.velocity.z * 1000.0f;
+  // stateCompressed.vx = state.velocity.x * 1000.0f;
+  // stateCompressed.vy = state.velocity.y * 1000.0f;
+  // stateCompressed.vz = state.velocity.z * 1000.0f;
 
-  stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
-  stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
-  stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
+  // stateCompressed.ax = state.acc.x * 9.81f * 1000.0f;
+  // stateCompressed.ay = state.acc.y * 9.81f * 1000.0f;
+  // stateCompressed.az = (state.acc.z + 1) * 9.81f * 1000.0f;
+  stateCompressed.ax = sensorData.acc.x * 9810.0f;
+  stateCompressed.ay = sensorData.acc.y * 9810.0f;
+  stateCompressed.az = (sensorData.acc.z - 1) * 9810.0f;
 
   float const q[4] = {
-    state.attitudeQuaternion.x,
-    state.attitudeQuaternion.y,
-    state.attitudeQuaternion.z,
-    state.attitudeQuaternion.w};
+      state.attitudeQuaternion.x,
+      state.attitudeQuaternion.y,
+      state.attitudeQuaternion.z,
+      state.attitudeQuaternion.w};
   stateCompressed.quat = quatcompress(q);
 
   float const deg2millirad = ((float)M_PI * 1000.0f) / 180.0f;
   stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
   stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
-  stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
+  // stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
-static void compressSetpoint()
-{
-  setpointCompressed.x = setpoint.position.x * 1000.0f;
-  setpointCompressed.y = setpoint.position.y * 1000.0f;
-  setpointCompressed.z = setpoint.position.z * 1000.0f;
-
-  setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
-  setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
-  setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
-
-  setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
-  setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
-  setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
-}
+// static void compressSetpoint()
+// {
+//   setpointCompressed.x = setpoint.position.x * 1000.0f;
+//   setpointCompressed.y = setpoint.position.y * 1000.0f;
+//   setpointCompressed.z = setpoint.position.z * 1000.0f;
+//   setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
+//   setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
+//   setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
+//   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
+//   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
+//   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
+// }
 
 void stabilizerInit(StateEstimatorType estimator)
 {
-  if(isInit)
+  if (isInit)
     return;
 
   sensorsInit();
@@ -195,8 +300,8 @@ void stabilizerInit(StateEstimatorType estimator)
   controllerInit(ControllerTypeAny);
   powerDistributionInit();
   sitAwInit();
-  collisionAvoidanceInit();
-  estimatorType = getStateEstimator();
+  // collisionAvoidanceInit();
+  estimatorType = 1;
   controllerType = getControllerType();
 
   STATIC_MEM_TASK_CREATE(stabilizerTask, stabilizerTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
@@ -210,43 +315,45 @@ bool stabilizerTest(void)
 
   pass &= sensorsTest();
   pass &= stateEstimatorTest();
-  pass &= controllerTest();
+  // pass &= controllerTest();
   pass &= powerDistributionTest();
-  pass &= collisionAvoidanceTest();
+  // pass &= collisionAvoidanceTest();
 
   return pass;
 }
 
-static void checkEmergencyStopTimeout()
-{
-  if (emergencyStopTimeout >= 0) {
-    emergencyStopTimeout -= 1;
-
-    if (emergencyStopTimeout == 0) {
-      emergencyStop = true;
-    }
-  }
-}
+// static void checkEmergencyStopTimeout()
+// {
+//   if (emergencyStopTimeout >= 0)
+//   {
+//     emergencyStopTimeout -= 1;
+//     if (emergencyStopTimeout == 0)
+//     {
+//       emergencyStop = true;
+//     }
+//   }
+// }
 
 /* The stabilizer loop runs at 1kHz (stock) or 500Hz (kalman). It is the
  * responsibility of the different functions to run slower by skipping call
  * (ie. returning without modifying the output structure).
  */
 
-static void stabilizerTask(void* param)
+static void stabilizerTask(void *param)
 {
   uint32_t tick;
   uint32_t lastWakeTime;
-  vTaskSetApplicationTaskTag(0, (void*)TASK_STABILIZER_ID_NBR);
+  vTaskSetApplicationTaskTag(0, (void *)TASK_STABILIZER_ID_NBR);
 
-  //Wait for the system to be fully started to start stabilization loop
+  // Wait for the system to be fully started to start stabilization loop
   systemWaitStart();
 
   DEBUG_PRINT("Wait for sensor calibration...\n");
 
   // Wait for sensors to be calibrated
   lastWakeTime = xTaskGetTickCount();
-  while(!sensorsAreCalibrated()) {
+  while (!sensorsAreCalibrated())
+  {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
   }
   // Initialize tick to something else then 0
@@ -256,64 +363,144 @@ static void stabilizerTask(void* param)
 
   DEBUG_PRINT("Ready to fly.\n");
 
-  while(1) {
+  attitude_control_limit = 5000.0f;
+  thrust_flag = true; 
+  flip_roll = 20000;
+  flip_roll_stop = 20000;
+  // control_kp = 18000.0f;
+  // control_kd = 6.0f;
+  // control_kdz = 20.0f;
+
+  while (1)
+  {
     // The sensor should unlock at 1kHz
     sensorsWaitDataReady();
 
-    if (startPropTest != false) {
+    if (startPropTest != false)
+    {
       // TODO: What happens with estimator when we run tests after startup?
       testState = configureAcc;
       startPropTest = false;
     }
 
-    if (testState != testDone) {
+    if (testState != testDone)
+    {
       sensorsAcquire(&sensorData, tick);
       testProps(&sensorData);
-    } else {
+    }
+    else
+    {
       // allow to update estimator dynamically
-      if (getStateEstimator() != estimatorType) {
+      if (getStateEstimator() != estimatorType)
+      {
         stateEstimatorSwitchTo(estimatorType);
         estimatorType = getStateEstimator();
       }
       // allow to update controller dynamically
-      if (getControllerType() != controllerType) {
-        controllerInit(controllerType);
-        controllerType = getControllerType();
-      }
+      // if (getControllerType() != controllerType)
+      // {
+      //   controllerInit(controllerType);
+      //   controllerType = getControllerType();
+      // }
 
       stateEstimator(&state, &sensorData, &control, tick);
       compressState();
 
       commanderGetSetpoint(&setpoint, &state);
-      compressSetpoint();
+      // compressSetpoint();
 
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
-      collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
+
+      // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
+      
+      if (setpoint.attitudeRate.yaw > 180.0f) 
+      {
+        servoRatio_stabilizer=243;
+        setpoint.attitudeRate.yaw = 0.0f;
+      }
+      else if (setpoint.attitudeRate.yaw < -180.0f) 
+      {
+        servoRatio_stabilizer=230;
+        setpoint.attitudeRate.yaw = 0.0f;
+      }
+
 
       controller(&control, &setpoint, &sensorData, &state, tick);
 
-      checkEmergencyStopTimeout();
+      // if (tick % 10 == 0){
+      //   if (state.attitude.roll  < 5.0f){
+      //     servoRatio_stabilizer=243;
+      //   }
+      //   else{
+      //     servoRatio_stabilizer=230;
+      //   }
+      // }
+
+    
+      
+      if (setpoint.thrust < attitude_control_limit) // disable the attitude controller when the desired thrust is close to zero
+      { 
+        thrust_flag = false;
+        control.thrust = 0.0f;
+      }
+      else
+      {
+        if (thrust_flag){
+          ;
+        }
+        else
+        {
+          if (stateCompressed.az > 2000)
+          {
+            thrust_flag = true;
+          }
+          else
+          {
+            control.thrust = 0.0f;
+          }
+        }
+
+      }
+
+      if ( fabsf(setpoint.thrust - 6000) < 10.0f )
+      {
+        control.thrust = 0;
+        control.roll = flip_roll;
+        control.pitch = 0;
+        control.yaw = 0;
+
+        if (fabsf(state.attitude.roll - 180.0f) < 10.0f) 
+        {
+          flip_roll = - flip_roll_stop;
+        }
+      }
+
+      // control.thrust = setpoint.thrust;
+      
+
+      // checkEmergencyStopTimeout(); // a timer, is this useful? remove it?
+      // stabilizerResetEmergencyStop();
 
       checkStops = systemIsArmed();
-      if (emergencyStop || (systemIsArmed() == false)) {
-        powerStop();
-      } else {
+      if (emergencyStop || (systemIsArmed() == false))
+      {
+        ;
+        // powerStop();
+      }
+      else
+      {
         powerDistribution(&control);
       }
 
-      // Log data to uSD card if configured
-      if (   usddeckLoggingEnabled()
-          && usddeckLoggingMode() == usddeckLoggingMode_SynchronousStabilizer
-          && RATE_DO_EXECUTE(usddeckFrequency(), tick)) {
-        usddeckTriggerLogging();
-      }
     }
     calcSensorToOutputLatency(&sensorData);
     tick++;
     STATS_CNT_RATE_EVENT(&stabilizerRate);
 
-    if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount())) {
-      if (!rateWarningDisplayed) {
+    if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount()))
+    {
+      if (!rateWarningDisplayed)
+      {
         DEBUG_PRINT("WARNING: stabilizer loop rate is off (%lu)\n", rateSupervisorLatestCount(&rateSupervisorContext));
         rateWarningDisplayed = true;
       }
@@ -323,7 +510,7 @@ static void stabilizerTask(void* param)
 
 void stabilizerSetEmergencyStop()
 {
-  emergencyStop = true;
+  emergencyStop = false;
 }
 
 void stabilizerResetEmergencyStop()
@@ -373,7 +560,6 @@ static bool evaluateTest(float low, float high, float value, uint8_t motor)
   return true;
 }
 
-
 static void testProps(sensorData_t *sensors)
 {
   static uint32_t i = 0;
@@ -416,7 +602,6 @@ static void testProps(sensorData_t *sensors)
                   (double)accVarXnf + (double)accVarYnf, (double)accVarZnf);
       testState = measureProp;
     }
-
   }
   else if (testState == measureProp)
   {
@@ -446,8 +631,8 @@ static void testProps(sensorData_t *sensors)
       accVarY[motorToTest] = variance(accY, PROPTEST_NBR_OF_VARIANCE_VALUES);
       accVarZ[motorToTest] = variance(accZ, PROPTEST_NBR_OF_VARIANCE_VALUES);
       DEBUG_PRINT("Motor M%d variance X+Y:%f (Z:%f)\n",
-                   motorToTest+1, (double)accVarX[motorToTest] + (double)accVarY[motorToTest],
-                   (double)accVarZ[motorToTest]);
+                  motorToTest + 1, (double)accVarX[motorToTest] + (double)accVarY[motorToTest],
+                  (double)accVarZ[motorToTest]);
     }
     else if (i >= 1000)
     {
@@ -486,12 +671,12 @@ static void testProps(sensorData_t *sensors)
       motorsSetRatio(MOTOR_M2, 0);
       motorsSetRatio(MOTOR_M3, 0);
       motorsSetRatio(MOTOR_M4, 0);
-//      DEBUG_PRINT("IdleV: %f, minV: %f, M1V: %f, M2V: %f, M3V: %f, M4V: %f\n", (double)idleVoltage,
-//                  (double)minLoadedVoltage,
-//                  (double)minSingleLoadedVoltage[MOTOR_M1],
-//                  (double)minSingleLoadedVoltage[MOTOR_M2],
-//                  (double)minSingleLoadedVoltage[MOTOR_M3],
-//                  (double)minSingleLoadedVoltage[MOTOR_M4]);
+      //      DEBUG_PRINT("IdleV: %f, minV: %f, M1V: %f, M2V: %f, M3V: %f, M4V: %f\n", (double)idleVoltage,
+      //                  (double)minLoadedVoltage,
+      //                  (double)minSingleLoadedVoltage[MOTOR_M1],
+      //                  (double)minSingleLoadedVoltage[MOTOR_M2],
+      //                  (double)minSingleLoadedVoltage[MOTOR_M3],
+      //                  (double)minSingleLoadedVoltage[MOTOR_M4]);
       DEBUG_PRINT("%f %f %f %f %f %f\n", (double)idleVoltage,
                   (double)(idleVoltage - minLoadedVoltage),
                   (double)(idleVoltage - minSingleLoadedVoltage[MOTOR_M1]),
@@ -515,12 +700,12 @@ static void testProps(sensorData_t *sensors)
   {
     for (int m = 0; m < NBR_OF_MOTORS; m++)
     {
-      if (!evaluateTest(0, PROPELLER_BALANCE_TEST_THRESHOLD,  accVarX[m] + accVarY[m], m))
+      if (!evaluateTest(0, PROPELLER_BALANCE_TEST_THRESHOLD, accVarX[m] + accVarY[m], m))
       {
         nrFailedTests++;
         for (int j = 0; j < 3; j++)
         {
-          motorsBeep(m, true, testsound[m], (uint16_t)(MOTORS_TIM_BEEP_CLK_FREQ / A4)/ 20);
+          motorsBeep(m, true, testsound[m], (uint16_t)(MOTORS_TIM_BEEP_CLK_FREQ / A4) / 20);
           vTaskDelay(M2T(MOTORS_TEST_ON_TIME_MS));
           motorsBeep(m, false, 0, 0);
           vTaskDelay(M2T(100));
@@ -532,7 +717,7 @@ static void testProps(sensorData_t *sensors)
     {
       for (int m = 0; m < NBR_OF_MOTORS; m++)
       {
-        motorsBeep(m, true, testsound[m], (uint16_t)(MOTORS_TIM_BEEP_CLK_FREQ / A4)/ 20);
+        motorsBeep(m, true, testsound[m], (uint16_t)(MOTORS_TIM_BEEP_CLK_FREQ / A4) / 20);
         vTaskDelay(M2T(MOTORS_TEST_ON_TIME_MS));
         motorsBeep(m, false, 0, 0);
         vTaskDelay(M2T(MOTORS_TEST_DELAY_TIME_MS));
@@ -547,11 +732,20 @@ PARAM_GROUP_START(health)
 PARAM_ADD(PARAM_UINT8, startPropTest, &startPropTest)
 PARAM_GROUP_STOP(health)
 
-
 PARAM_GROUP_START(stabilizer)
 PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
-PARAM_ADD(PARAM_UINT8, controller, &controllerType)
+// PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
+PARAM_ADD(PARAM_FLOAT, acl, &attitude_control_limit)
+PARAM_ADD(PARAM_INT16, fr, &flip_roll)
+PARAM_ADD(PARAM_INT16, frb, &flip_roll_stop)
+
+
+
+
+// PARAM_ADD(PARAM_FLOAT, kp, &control_kp)
+// PARAM_ADD(PARAM_FLOAT, kd, &control_kd)
+// PARAM_ADD(PARAM_FLOAT, kdz, &control_kdz)
 PARAM_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(health)
@@ -587,7 +781,7 @@ LOG_ADD(LOG_FLOAT, yaw, &setpoint.attitudeRate.yaw)
 LOG_GROUP_STOP(ctrltarget)
 
 LOG_GROUP_START(ctrltargetZ)
-LOG_ADD(LOG_INT16, x, &setpointCompressed.x)   // position - mm
+LOG_ADD(LOG_INT16, x, &setpointCompressed.x) // position - mm
 LOG_ADD(LOG_INT16, y, &setpointCompressed.y)
 LOG_ADD(LOG_INT16, z, &setpointCompressed.z)
 
@@ -605,6 +799,9 @@ LOG_ADD(LOG_FLOAT, roll, &state.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &state.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &state.attitude.yaw)
 LOG_ADD(LOG_FLOAT, thrust, &control.thrust)
+LOG_ADD(LOG_UINT8, servo, &servoRatio_stabilizer)
+
+
 
 STATS_CNT_RATE_LOG_ADD(rtStab, &stabilizerRate)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
@@ -678,21 +875,21 @@ LOG_ADD(LOG_FLOAT, qw, &state.attitudeQuaternion.w)
 LOG_GROUP_STOP(stateEstimate)
 
 LOG_GROUP_START(stateEstimateZ)
-LOG_ADD(LOG_INT16, x, &stateCompressed.x)                 // position - mm
+LOG_ADD(LOG_INT16, x, &stateCompressed.x) // position - mm
 LOG_ADD(LOG_INT16, y, &stateCompressed.y)
 LOG_ADD(LOG_INT16, z, &stateCompressed.z)
 
-LOG_ADD(LOG_INT16, vx, &stateCompressed.vx)               // velocity - mm / sec
+LOG_ADD(LOG_INT16, vx, &stateCompressed.vx) // velocity - mm / sec
 LOG_ADD(LOG_INT16, vy, &stateCompressed.vy)
 LOG_ADD(LOG_INT16, vz, &stateCompressed.vz)
 
-LOG_ADD(LOG_INT16, ax, &stateCompressed.ax)               // acceleration - mm / sec^2
+LOG_ADD(LOG_INT16, ax, &stateCompressed.ax) // acceleration - mm / sec^2
 LOG_ADD(LOG_INT16, ay, &stateCompressed.ay)
 LOG_ADD(LOG_INT16, az, &stateCompressed.az)
 
-LOG_ADD(LOG_UINT32, quat, &stateCompressed.quat)           // compressed quaternion, see quatcompress.h
+LOG_ADD(LOG_UINT32, quat, &stateCompressed.quat) // compressed quaternion, see quatcompress.h
 
-LOG_ADD(LOG_INT16, rateRoll, &stateCompressed.rateRoll)   // angular velocity - milliradians / sec
+LOG_ADD(LOG_INT16, rateRoll, &stateCompressed.rateRoll) // angular velocity - milliradians / sec
 LOG_ADD(LOG_INT16, ratePitch, &stateCompressed.ratePitch)
 LOG_ADD(LOG_INT16, rateYaw, &stateCompressed.rateYaw)
 LOG_GROUP_STOP(stateEstimateZ)
