@@ -44,6 +44,7 @@
 #include "crtp_localization_service.h"
 #include "sitaw.h"
 #include "controller.h"
+// #include "controller_pid.h"
 #include "power_distribution.h"
 // #include "collision_avoidance.h"
 
@@ -54,14 +55,13 @@
 #include "static_mem.h"
 #include "rateSupervisor.h"
 
-
-//my code servo control..start
+// my code servo control..start
 static uint8_t servoRatio_stabilizer = 243;
 uint8_t getservoRatio()
 {
   return servoRatio_stabilizer;
 }
-//my code servo control..end
+// my code servo control..end
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -86,12 +86,24 @@ static ControllerType controllerType;
 // ----- my variables start -----
 static float attitude_control_limit;
 bool thrust_flag;
-static int16_t flip_roll;
-static int16_t flip_roll_stop;
-// static float control_kp;
-// static float control_kd;
-// static float control_kdz;
+float thrust_hold = 0.0f;
 
+int8_t loop_timer = 0;
+
+static float qw_desired = 1.0f;
+static float qx_desired = 0.0f;
+static float qy_desired = 0.0f;
+static float qz_desired = 0.0f;
+
+static float tau_x = 0.0f;
+static float tau_y = 0.0f;
+static float tau_z = 0.0f;
+
+static float kd_xy = 250;
+static float kd_z = 250;
+
+static float kp_xy = 25000;
+static float kp_z = 0;
 
 // ----- my variables end   -----
 
@@ -170,6 +182,122 @@ static void stabilizerTask(void *param);
 static void testProps(sensorData_t *sensors);
 
 // ----- my functions start -----
+float limint16(float in)
+{
+  if (in > 32000.0f)
+    return 32000.0f;
+  else if (in < -32000.0f)
+    return -32000.0f;
+  else
+    return in;
+}
+
+void eul2quat_my(float yaw, float pitch, float roll,
+                 float *w, float *x, float *y, float *z)
+{
+  float c1c2;
+  float c_idx_0;
+  float c_idx_1;
+  float c_idx_2;
+  float s1s2;
+  float s_idx_0;
+  float s_idx_1;
+  float s_idx_2;
+  s_idx_0 = yaw / 2.0F;
+  s_idx_1 = pitch / 2.0F;
+  s_idx_2 = roll / 2.0F;
+  c_idx_0 = cosf(s_idx_0);
+  s_idx_0 = sinf(s_idx_0);
+  c_idx_1 = cosf(s_idx_1);
+  s_idx_1 = sinf(s_idx_1);
+  c_idx_2 = cosf(s_idx_2);
+  s_idx_2 = sinf(s_idx_2);
+  c1c2 = c_idx_0 * c_idx_1;
+  s1s2 = s_idx_0 * s_idx_1;
+  c_idx_0 *= s_idx_1;
+  s_idx_1 = s_idx_0 * c_idx_1;
+  *w = c1c2 * c_idx_2 + s1s2 * s_idx_2;
+  *x = c1c2 * s_idx_2 - s1s2 * c_idx_2;
+  *y = c_idx_0 * c_idx_2 + s_idx_1 * s_idx_2;
+  *z = s_idx_1 * c_idx_2 - c_idx_0 * s_idx_2;
+}
+
+bool same_attitude(float w, float x, float y, float z, float w_d, float x_d, float y_d, float z_d)
+{
+  // Calculate the dot product of the two quaternions
+  float dot_product = w * w_d + x * x_d + y * y_d + z * z_d;
+  // Check if the absolute value of the dot product is close to 1
+  return fabsf(dot_product) > 0.999999f;
+}
+
+void pcontrol(float w, float x, float y, float z, float w_d, float x_d,
+              float y_d, float z_d, float *tau_x, float *tau_y, float *tau_z)
+{
+  if (same_attitude(w, x, y, z, w_d, x_d, y_d, z_d))
+  {
+    *tau_x = 0.0F;
+    *tau_y = 0.0F;
+    *tau_z = 0.0F;
+  }
+  else
+  {
+    float b_temp2_tmp;
+    float temp2_tmp;
+    float wwd;
+    float x2;
+    float xd2;
+    float xxd;
+    float y2;
+    float yd2;
+    float yyd;
+    float z2;
+    float zd2;
+    float zzd;
+    wwd = w * w_d;
+    xxd = x * x_d;
+    yyd = y * y_d;
+    zzd = z * z_d;
+    x2 = x * x;
+    y2 = y * y;
+    z2 = z * z;
+    xd2 = x_d * x_d;
+    yd2 = y_d * y_d;
+    zd2 = z_d * z_d;
+    temp2_tmp = 2.0F * xxd;
+    b_temp2_tmp = 2.0F * wwd;
+    x2 = (((((((((((((((((((-2.0F * x2 * xd2 - x2 * yd2) - x2 * zd2) + x2) -
+                         temp2_tmp * yyd) -
+                        temp2_tmp * zzd) -
+                       b_temp2_tmp * xxd) -
+                      xd2 * y2) -
+                     xd2 * z2) +
+                    xd2) -
+                   2.0F * y2 * yd2) -
+                  y2 * zd2) +
+                 y2) -
+                2.0F * yyd * zzd) -
+               b_temp2_tmp * yyd) -
+              yd2 * z2) +
+             yd2) -
+            2.0F * z2 * zd2) +
+           z2) -
+          b_temp2_tmp * zzd) +
+         zd2;
+    if (x2 <= 0.0F)
+    {
+      *tau_x = 0.0F;
+      *tau_y = 0.0F;
+      *tau_z = 0.0F;
+    }
+    else
+    {
+      x2 = 2.0F * acosf(((wwd + xxd) + yyd) + zzd) / sqrtf(x2);
+      *tau_x = x2 * (((w * x_d - w_d * x) - y * z_d) + y_d * z);
+      *tau_y = x2 * (((w * y_d - w_d * y) + x * z_d) - x_d * z);
+      *tau_z = x2 * (((w * z_d - w_d * z) - x * y_d) + x_d * y);
+    }
+  }
+}
 
 // ----- my functions end   -----
 
@@ -178,7 +306,6 @@ static void calcSensorToOutputLatency(const sensorData_t *sensorData)
   uint64_t outTimestamp = usecTimestamp();
   inToOutLatency = outTimestamp - sensorData->interruptTimestamp;
 }
-
 
 static void compressState()
 {
@@ -255,18 +382,6 @@ bool stabilizerTest(void)
   return pass;
 }
 
-// static void checkEmergencyStopTimeout()
-// {
-//   if (emergencyStopTimeout >= 0)
-//   {
-//     emergencyStopTimeout -= 1;
-//     if (emergencyStopTimeout == 0)
-//     {
-//       emergencyStop = true;
-//     }
-//   }
-// }
-
 /* The stabilizer loop runs at 1kHz (stock) or 500Hz (kalman). It is the
  * responsibility of the different functions to run slower by skipping call
  * (ie. returning without modifying the output structure).
@@ -297,12 +412,7 @@ static void stabilizerTask(void *param)
   DEBUG_PRINT("Ready to fly.\n");
 
   attitude_control_limit = 5000.0f;
-  thrust_flag = true; 
-  flip_roll = 20000;
-  flip_roll_stop = 20000;
-  // control_kp = 18000.0f;
-  // control_kd = 6.0f;
-  // control_kdz = 20.0f;
+  thrust_flag = true;
 
   while (1)
   {
@@ -344,41 +454,77 @@ static void stabilizerTask(void *param)
 
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
 
+      if (tick % 10 == 0)
+      {
+        loop_timer = loop_timer - 1;
+        setpoint.attitude.roll = 0.0f;
+        setpoint.attitude.pitch = 0.0f;
+        setpoint.attitudeRate.yaw = 0.0f;
+
+        if (loop_timer <= 0)
+          thrust_hold = 1000.0f;
+        if (loop_timer <= -8)
+          setpoint.attitudeRate.yaw = 200; // tight
+
+        if (sensorData.acc.z > 1.5f)
+        {
+          loop_timer = 10;
+          thrust_hold = 40000.0f;
+          setpoint.attitudeRate.yaw = -200; // release
+        }
+      }
+      setpoint.thrust = thrust_hold;
+
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
-      
-      if (setpoint.attitudeRate.yaw > 180.0f) 
+
+      if (setpoint.attitudeRate.yaw > 180.0f)
       {
-        servoRatio_stabilizer=243;
+        servoRatio_stabilizer = 243;
         setpoint.attitudeRate.yaw = 0.0f;
       }
-      else if (setpoint.attitudeRate.yaw < -180.0f) 
+      else if (setpoint.attitudeRate.yaw < -180.0f)
       {
-        servoRatio_stabilizer=230;
+        servoRatio_stabilizer = 230;
         setpoint.attitudeRate.yaw = 0.0f;
       }
+      // -------- attitude controller --------
+      // controller(&control, &setpoint, &sensorData, &state, tick);
+      // compute desired quat
+      eul2quat_my(setpoint.attitudeRate.yaw * -0.0174532925199433f,
+                  setpoint.attitude.pitch * -0.0174532925199433f,
+                  setpoint.attitude.roll * 0.0174532925199433f,
+                  &qw_desired,
+                  &qx_desired,
+                  &qy_desired,
+                  &qz_desired);
 
+      pcontrol(state.attitudeQuaternion.w,
+               state.attitudeQuaternion.x,
+               state.attitudeQuaternion.y,
+               state.attitudeQuaternion.z,
+               qw_desired,
+               qx_desired,
+               qy_desired,
+               qz_desired,
+               &tau_x, &tau_y, &tau_z);
 
-      controller(&control, &setpoint, &sensorData, &state, tick);
+      control.thrust = setpoint.thrust;
+      control.roll = (int16_t)limint16(tau_x * kp_xy + (-sensorData.gyro.x) * kd_xy);
+      control.pitch = -(int16_t)limint16(tau_y * kp_xy + (-sensorData.gyro.y) * kd_xy);
+      control.yaw = -(int16_t)limint16(tau_z * kp_z + (-sensorData.gyro.z) * kd_z);
 
-      // if (tick % 10 == 0){
-      //   if (state.attitude.roll  < 5.0f){
-      //     servoRatio_stabilizer=243;
-      //   }
-      //   else{
-      //     servoRatio_stabilizer=230;
-      //   }
-      // }
-
-    
       
+      // -------- end attitude controller --------
+
       if (setpoint.thrust < attitude_control_limit) // disable the attitude controller when the desired thrust is close to zero
-      { 
+      {
         thrust_flag = false;
-        control.thrust = 0.0f;
+        control.thrust = 1000.0f;
       }
       else
       {
-        if (thrust_flag){
+        if (thrust_flag)
+        {
           ;
         }
         else
@@ -389,30 +535,24 @@ static void stabilizerTask(void *param)
           }
           else
           {
-            control.thrust = 0.0f;
+            control.thrust = 1000.0f;
           }
-        }
-
-      }
-
-      if ( fabsf(setpoint.thrust - 6000) < 10.0f )
-      {
-        control.thrust = 0;
-        control.roll = flip_roll;
-        control.pitch = 0;
-        control.yaw = 0;
-
-        if (fabsf(state.attitude.roll - 180.0f) < 10.0f) 
-        {
-          flip_roll = - flip_roll_stop;
         }
       }
 
       // control.thrust = setpoint.thrust;
-      
 
       // checkEmergencyStopTimeout(); // a timer, is this useful? remove it?
       // stabilizerResetEmergencyStop();
+
+      if (fabsf(state.attitude.roll) > 150.0f)
+      {
+        servoRatio_stabilizer = 230;
+        control.thrust = 0;
+        control.roll = 0;
+        control.pitch = 0;
+        control.yaw = 0;
+      }
 
       checkStops = systemIsArmed();
       if (emergencyStop || (systemIsArmed() == false))
@@ -424,7 +564,6 @@ static void stabilizerTask(void *param)
       {
         powerDistribution(&control);
       }
-
     }
     calcSensorToOutputLatency(&sensorData);
     tick++;
@@ -670,15 +809,15 @@ PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 // PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
 PARAM_ADD(PARAM_FLOAT, acl, &attitude_control_limit)
-PARAM_ADD(PARAM_INT16, fr, &flip_roll)
-PARAM_ADD(PARAM_INT16, frb, &flip_roll_stop)
-
-
-
 
 // PARAM_ADD(PARAM_FLOAT, kp, &control_kp)
 // PARAM_ADD(PARAM_FLOAT, kd, &control_kd)
 // PARAM_ADD(PARAM_FLOAT, kdz, &control_kdz)
+
+PARAM_ADD(PARAM_FLOAT, kpxy, &kp_xy)
+PARAM_ADD(PARAM_FLOAT, kpz, &kp_z)
+PARAM_ADD(PARAM_FLOAT, kdxy, &kd_xy)
+PARAM_ADD(PARAM_FLOAT, kdz, &kd_z)
 PARAM_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(health)
@@ -733,8 +872,6 @@ LOG_ADD(LOG_FLOAT, pitch, &state.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &state.attitude.yaw)
 LOG_ADD(LOG_FLOAT, thrust, &control.thrust)
 LOG_ADD(LOG_UINT8, servo, &servoRatio_stabilizer)
-
-
 
 STATS_CNT_RATE_LOG_ADD(rtStab, &stabilizerRate)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
