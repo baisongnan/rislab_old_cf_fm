@@ -105,6 +105,12 @@ void powerDistribution(const control_t *control)
   att[2] = + control->roll - control->pitch + control->yaw;
   att[3] = + control->roll + control->pitch - control->yaw;
 
+  // laterel motors
+  // att[0] = - control->roll - control->pitch - control->yaw;
+  // att[1] = - control->roll + control->pitch + control->yaw;
+  // att[2] = + control->roll + control->pitch - control->yaw;
+  // att[3] = + control->roll - control->pitch + control->yaw;
+
   int32_t min = att[0];
   for (int mi = 1; mi < 4; mi++)
   {

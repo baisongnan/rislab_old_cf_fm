@@ -69,14 +69,14 @@ static uint8_t servoRatio_spin = 240;
 static float jump_test_threshold = 1050.0f;
 // my code servo control..end
 
-static float ki_roll = 50;
-static float kp_roll = 750; // 1500
-static float kd_roll = 250; // 500
-static float ki_pitch = 50;
-static float kp_pitch = 750; // 1000
-static float kd_pitch = 250; // 500
+static float ki_roll = 20;
+static float kp_roll = 850; // 1500
+static float kd_roll = 450; // 500
+static float ki_pitch = 20;
+static float kp_pitch = 850; // 1000
+static float kd_pitch = 450; // 500
 // static float kp_yaw = 10; //100
-static float kd_yaw = 100; // 100
+static float kd_yaw = 600; // 100
 
 static float error_roll_int = 0.0f;
 static float error_pitch_int = 0.0f;
@@ -86,12 +86,12 @@ static bool emergencyStop = false;
 // static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
 static float stand_thrust_threshold = 1000.0f;
 
-static float stand_mgl = 55000.0f;
+static float stand_mgl = 60000.0f;
 
 static float hopping_thrust_threshold = 1500.0f;
-bool leg_motor_flag;
+bool leg_motor_flag = false;
 uint16_t leg_motor_timer;
-static uint16_t leg_motor_timer_limit = 1000;
+static uint16_t leg_motor_timer_limit = 160;
 
 static bool checkStops;
 
@@ -154,20 +154,7 @@ static struct
   int16_t rateYaw;
 } stateCompressed;
 
-// static struct {
-//   // position - mm
-//   int16_t x;
-//   int16_t y;
-//   int16_t z;
-//   // velocity - mm / sec
-//   int16_t vx;
-//   int16_t vy;
-//   int16_t vz;
-//   // acceleration - mm / sec^2
-//   int16_t ax;
-//   int16_t ay;
-//   int16_t az;
-// } setpointCompressed;
+
 
 static float accVarX[NBR_OF_MOTORS];
 static float accVarY[NBR_OF_MOTORS];
@@ -222,18 +209,6 @@ static void compressState()
   stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
 }
 
-// static void compressSetpoint()
-// {
-//   setpointCompressed.x = setpoint.position.x * 1000.0f;
-//   setpointCompressed.y = setpoint.position.y * 1000.0f;
-//   setpointCompressed.z = setpoint.position.z * 1000.0f;
-//   setpointCompressed.vx = setpoint.velocity.x * 1000.0f;
-//   setpointCompressed.vy = setpoint.velocity.y * 1000.0f;
-//   setpointCompressed.vz = setpoint.velocity.z * 1000.0f;
-//   setpointCompressed.ax = setpoint.acceleration.x * 1000.0f;
-//   setpointCompressed.ay = setpoint.acceleration.y * 1000.0f;
-//   setpointCompressed.az = setpoint.acceleration.z * 1000.0f;
-// }
 
 void stabilizerInit(StateEstimatorType estimator)
 {
@@ -267,15 +242,6 @@ bool stabilizerTest(void)
   return pass;
 }
 
-// static void checkEmergencyStopTimeout()
-// {
-//   if (emergencyStopTimeout >= 0) {
-//     emergencyStopTimeout -= 1;
-//     if (emergencyStopTimeout == 0) {
-//       emergencyStop = true;
-//     }
-//   }
-// }
 
 /* The stabilizer loop runs at 1kHz (stock) or 500Hz (kalman). It is the
  * responsibility of the different functions to run slower by skipping call
@@ -415,20 +381,20 @@ static void stabilizerTask(void *param)
         float tau_y = (kp_pitch * error_pitch + kd_pitch * (sensorData.gyro.y) + ki_pitch * error_pitch_int) + stand_mgl * sinf(pitch_temp);
         float tau_z = -kd_yaw * (setpoint.attitudeRate.yaw - sensorData.gyro.z);
 
-        if (tau_z > 32000.0f)
-          tau_z = 32000.0f;
-        if (tau_z < -32000.0f)
-          tau_z = -32000.0f;
+        if (tau_z > 12000.0f)
+          tau_z = 12000.0f;
+        if (tau_z < -12000.0f)
+          tau_z = -12000.0f;
 
-        if (tau_x > 32000.0f)
-          tau_x = 32000.0f;
-        if (tau_x < -32000.0f)
-          tau_x = -32000.0f;
+        if (tau_x > 12000.0f)
+          tau_x = 12000.0f;
+        if (tau_x < -12000.0f)
+          tau_x = -12000.0f;
 
-        if (tau_y > 32000.0f)
-          tau_y = 32000.0f;
-        if (tau_y < -32000.0f)
-          tau_y = -32000.0f;
+        if (tau_y > 12000.0f)
+          tau_y = 12000.0f;
+        if (tau_y < -12000.0f)
+          tau_y = -12000.0f;
 
         // saturation needed here
         //  control.thrust = 1000.0f;
@@ -468,12 +434,7 @@ static void stabilizerTask(void *param)
         powerDistribution(&control);
       }
 
-      // // Log data to uSD card if configured
-      // if (   usddeckLoggingEnabled()
-      //     && usddeckLoggingMode() == usddeckLoggingMode_SynchronousStabilizer
-      //     && RATE_DO_EXECUTE(usddeckFrequency(), tick)) {
-      //   usddeckTriggerLogging();
-      // }
+
     }
     calcSensorToOutputLatency(&sensorData);
     tick++;
@@ -490,21 +451,6 @@ static void stabilizerTask(void *param)
   }
 }
 
-// void stabilizerSetEmergencyStop()
-// {
-//   emergencyStop = true;
-// }
-
-// void stabilizerResetEmergencyStop()
-// {
-//   emergencyStop = false;
-// }
-
-// void stabilizerSetEmergencyStopTimeout(int timeout)
-// {
-//   emergencyStop = false;
-//   emergencyStopTimeout = timeout;
-// }
 
 static float variance(float *buffer, uint32_t length)
 {
@@ -769,20 +715,6 @@ LOG_ADD(LOG_FLOAT, roll, &setpoint.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &setpoint.attitude.pitch)
 LOG_ADD(LOG_FLOAT, yaw, &setpoint.attitudeRate.yaw)
 LOG_GROUP_STOP(ctrltarget)
-
-// LOG_GROUP_START(ctrltargetZ)
-// LOG_ADD(LOG_INT16, x, &setpointCompressed.x)   // position - mm
-// LOG_ADD(LOG_INT16, y, &setpointCompressed.y)
-// LOG_ADD(LOG_INT16, z, &setpointCompressed.z)
-
-// LOG_ADD(LOG_INT16, vx, &setpointCompressed.vx) // velocity - mm / sec
-// LOG_ADD(LOG_INT16, vy, &setpointCompressed.vy)
-// LOG_ADD(LOG_INT16, vz, &setpointCompressed.vz)
-
-// LOG_ADD(LOG_INT16, ax, &setpointCompressed.ax) // acceleration - mm / sec^2
-// LOG_ADD(LOG_INT16, ay, &setpointCompressed.ay)
-// LOG_ADD(LOG_INT16, az, &setpointCompressed.az)
-// LOG_GROUP_STOP(ctrltargetZ)
 
 LOG_GROUP_START(stabilizer)
 LOG_ADD(LOG_FLOAT, roll, &state.attitude.roll)
