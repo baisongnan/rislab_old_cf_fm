@@ -54,12 +54,31 @@ float qx = 0.0f;
 float qy = 0.0f;
 float qz = 0.0f;  // quaternion of sensor frame relative to auxiliary frame
 
-void setquat(float w, float x, float y, float z) 
+void quaternion_multiply(
+    float q1w, float q1x, float q1y, float q1z,
+    float q2w, float q2x, float q2y, float q2z,
+    float *q3w, float *q3x, float *q3y, float *q3z)
+{
+  *q3w = q1w * q2w - q1x * q2x - q1y * q2y - q1z * q2z;
+  *q3x = q1w * q2x + q1x * q2w + q1y * q2z - q1z * q2y;
+  *q3y = q1w * q2y - q1x * q2z + q1y * q2w + q1z * q2x;
+  *q3z = q1w * q2z + q1x * q2y - q1y * q2x + q1z * q2w;
+}
+
+void setquat(float w, float x, float y, float z)
 {
   qw = w;
   qx = x;
   qy = y;
   qz = z;
+}
+
+void applyquat(float w, float x, float y, float z)
+{
+  quaternion_multiply(
+      w, x, y, z,
+      qw, qx, qy, qz,
+      &qw, &qx, &qy, &qz);
 }
 
 static float gravX, gravY, gravZ; // Unit vector in the estimated gravity direction
