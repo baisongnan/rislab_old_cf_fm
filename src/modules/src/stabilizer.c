@@ -88,7 +88,7 @@ static float stand_thrust_threshold = 1000.0f;
 
 static float stand_mgl = 60000.0f;
 
-static float hopping_thrust_threshold = 1500.0f;
+// static float hopping_thrust_threshold = 1500.0f;
 bool leg_motor_flag = false;
 uint16_t leg_motor_timer;
 static uint16_t leg_motor_timer_limit = 160;
@@ -324,7 +324,7 @@ static void stabilizerTask(void *param)
         error_pitch_int = 0.0f;
       }
 
-      if (fabsf(setpoint.thrust - hopping_thrust_threshold) <= 100.0f) // hopping
+      if (setpoint.thrust>=10000.0f && setpoint.thrust<=11000.0f) // hopping
       {
         if (leg_motor_flag)
         {
@@ -343,6 +343,8 @@ static void stabilizerTask(void *param)
             servoRatio_stabilizer = servoRatio_stop;
           }
         }
+        control.thrust = 1000.0f;
+        leg_motor_timer_limit = (uint16_t)(setpoint.thrust - 10000.0f);
       }     
       else if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f) // standing control
       {
@@ -405,7 +407,8 @@ static void stabilizerTask(void *param)
         control.roll = (int16_t)tau_x;
         control.yaw = (int16_t)tau_z;
       }      
-      else if (setpoint.thrust < 10.0f)// not jump, not stand
+      // else if (setpoint.thrust < 10.0f)// not jump, not stand
+      else
       {
         leg_motor_flag = false;
         servoRatio_stabilizer = servoRatio_stop;
@@ -415,6 +418,8 @@ static void stabilizerTask(void *param)
       {
         leg_motor_flag = false;
         leg_motor_timer = 0;
+
+        control.thrust = 0.0f;
       }
 
 
@@ -681,7 +686,7 @@ PARAM_ADD(PARAM_UINT8, stf, &servo_test_flag)
 PARAM_ADD(PARAM_FLOAT, jtt, &jump_test_threshold)
 PARAM_ADD(PARAM_UINT8, srst, &servoRatio_stop)
 PARAM_ADD(PARAM_UINT8, srsp, &servoRatio_spin)
-PARAM_ADD(PARAM_UINT16, lmtl, &leg_motor_timer_limit)
+// PARAM_ADD(PARAM_UINT16, lmtl, &leg_motor_timer_limit)
 PARAM_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(health)
@@ -724,6 +729,7 @@ LOG_ADD(LOG_FLOAT, thrust, &control.thrust)
 
 STATS_CNT_RATE_LOG_ADD(rtStab, &stabilizerRate)
 LOG_ADD(LOG_UINT32, intToOut, &inToOutLatency)
+LOG_ADD(LOG_UINT8, servo, &servoRatio_stabilizer)
 LOG_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(acc)
