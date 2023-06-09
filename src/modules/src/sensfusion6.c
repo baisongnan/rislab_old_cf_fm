@@ -88,6 +88,9 @@ static float gravX, gravY, gravZ; // Unit vector in the estimated gravity direct
 // This value will be better the more level the copter is at calibration time
 static float baseZacc = 1.0;
 
+static uint8_t gravity_correction = 1;
+
+
 static bool isInit;
 
 static bool isCalibrated = false;
@@ -144,6 +147,7 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
   qDot4 = 0.5f * (qw * gz + qx * gy - qy * gx);
 
   // Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+  if (gravity_correction){
   if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f)))
   {
     // Normalise accelerometer measurement
@@ -184,6 +188,7 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
     qDot3 -= beta * s2;
     qDot4 -= beta * s3;
   }
+  }
 
   // Integrate rate of change of quaternion to yield quaternion
   qw += qDot1 * dt;
@@ -217,6 +222,7 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
   gz = gz * M_PI_F / 180;
 
   // Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
+  if (gravity_correction){
   if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f)))
   {
     // Normalise accelerometer measurement
@@ -256,6 +262,7 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
     gx += twoKp * halfex;
     gy += twoKp * halfey;
     gz += twoKp * halfez;
+  }
   }
 
   // Integrate rate of change of quaternion
@@ -362,4 +369,5 @@ PARAM_ADD(PARAM_FLOAT, kp, &twoKp)
 PARAM_ADD(PARAM_FLOAT, ki, &twoKi)
 #endif
 PARAM_ADD(PARAM_FLOAT, baseZacc, &baseZacc)
+PARAM_ADD(PARAM_UINT8, gc, &gravity_correction)
 PARAM_GROUP_STOP(sensfusion6)
