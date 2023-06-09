@@ -368,46 +368,6 @@ static void stabilizerTask(void *param)
       //     servoRatio_stabilizer=230;
       //   }
       // }
-
-    
-      
-      if (setpoint.thrust < attitude_control_limit) // disable the attitude controller when the desired thrust is close to zero
-      { 
-        thrust_flag = false;
-        control.thrust = 0.0f;
-      }
-      else
-      {
-        if (thrust_flag){
-          ;
-        }
-        else
-        {
-          if (stateCompressed.az > 2000)
-          {
-            thrust_flag = true;
-          }
-          else
-          {
-            control.thrust = 0.0f;
-          }
-        }
-
-      }
-
-      if ( fabsf(setpoint.thrust - 6000) < 10.0f )
-      {
-        control.thrust = 0;
-        control.roll = flip_roll;
-        control.pitch = 0;
-        control.yaw = 0;
-
-        if (fabsf(state.attitude.roll - 180.0f) < 10.0f) 
-        {
-          flip_roll = - flip_roll_stop;
-        }
-      }
-
       // control.thrust = setpoint.thrust;
       
 
