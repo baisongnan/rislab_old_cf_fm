@@ -39,6 +39,7 @@
 #include "configblock.h"
 #include "worker.h"
 #include "lighthouse_storage.h"
+#include "sensfusion6.h"
 
 #include "locodeck.h"
 
@@ -179,7 +180,12 @@ static void extPoseHandler(const CRTPPacket* pk) {
   ext_pose.stdDevPos = extPosStdDev;
   ext_pose.stdDevQuat = extQuatStdDev;
 
-  estimatorEnqueuePose(&ext_pose);
+  // estimatorEnqueuePose(&ext_pose);
+  // send these data to sensfusion6
+  if (fabsf(ext_pose.x) <0.001f)
+    setquat(data->qw, data->qx, data->qy, data->qz); // directly update a correct attitude 
+  else if (fabsf(ext_pose.x - 1.0f) <0.001f)
+    applyquat(data->qw, data->qx, data->qy, data->qz); // apply the attitude correction matrix to current attitude
   tickOfLastPacket = xTaskGetTickCount();
 }
 
@@ -194,7 +200,7 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
       ext_pose.stdDevQuat = extQuatStdDev;
-      estimatorEnqueuePose(&ext_pose);
+      // estimatorEnqueuePose(&ext_pose);
       tickOfLastPacket = xTaskGetTickCount();
     } else {
       ext_pos.x = item->x / 1000.0f;
@@ -271,12 +277,12 @@ static void genericLocHandle(CRTPPacket* pk)
     case LPS_SHORT_LPP_PACKET:
       lpsShortLppPacketHandler(pk);
       break;
-    case EMERGENCY_STOP:
-      stabilizerSetEmergencyStop();
-      break;
-    case EMERGENCY_STOP_WATCHDOG:
-      stabilizerSetEmergencyStopTimeout(DEFAULT_EMERGENCY_STOP_TIMEOUT);
-      break;
+    // case EMERGENCY_STOP:
+    //   stabilizerSetEmergencyStop();
+    //   break;
+    // case EMERGENCY_STOP_WATCHDOG:
+    //   stabilizerSetEmergencyStopTimeout(DEFAULT_EMERGENCY_STOP_TIMEOUT);
+    //   break;
     case EXT_POSE:
       extPoseHandler(pk);
       break;
