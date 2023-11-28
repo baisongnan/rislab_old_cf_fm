@@ -66,27 +66,15 @@ static uint8_t servo_test = 244;
 static uint8_t servo_test_flag = 0;
 static uint8_t servoRatio_stop = 244;
 static uint8_t servoRatio_spin = 240;
-static float jump_test_threshold = 1050.0f;
+
 // my code servo control..end
 
-static float ki_roll = 20;
-static float kp_roll = 850; // 1500
-static float kd_roll = 450; // 500
-static float ki_pitch = 20;
-static float kp_pitch = 850; // 1000
-static float kd_pitch = 450; // 500
-// static float kp_yaw = 10; //100
-static float kd_yaw = 600; // 100
 
-static float error_roll_int = 0.0f;
-static float error_pitch_int = 0.0f;
+
 
 static bool isInit;
 static bool emergencyStop = false;
 // static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
-static float stand_thrust_threshold = 1000.0f;
-
-static float stand_mgl = 60000.0f;
 
 // static float hopping_thrust_threshold = 1500.0f;
 bool leg_motor_flag = false;
@@ -131,6 +119,180 @@ static TestState testState = testDone;
 static STATS_CNT_RATE_DEFINE(stabilizerRate, 500);
 static rateSupervisor_t rateSupervisorContext;
 static bool rateWarningDisplayed = false;
+
+static float idle_thrust;
+static float autorotate_thrust;
+
+static float kp_xy = 6000;
+
+static float kp_z = 6000;
+
+static float kd_xy = 10;
+static float kd_z = 10;
+
+static float tau_x_offset = 0.0f;
+static float tau_y_offset = 0.0f;
+static float tau_z_offset = 0.0f;
+
+static float tau_x = 0.0f;
+static float tau_y = 0.0f;
+static float tau_z = 0.0f;
+
+// static float omega_x = 0.0f;
+// static float omega_y = 0.0f;
+// static float omega_z = 0.0f;
+
+static float qw_desired = 1.0f;
+static float qx_desired = 0.0f;
+static float qy_desired = 0.0f;
+static float qz_desired = 0.0f;
+
+// static float qw_desired_delay = 1.0f;
+// static float qx_desired_delay = 0.0f;
+// static float qy_desired_delay = 0.0f;
+// static float qz_desired_delay = 0.0f;
+
+uint32_t timestamp_setpoint = 0;
+
+// static float external_loop_freq = 100.0f;
+// static uint32_t time_gap_setpoint = 10000;
+
+float limint16(float in)
+{
+  if (in > 32000.0f)
+    return 32000.0f;
+  else if (in < -32000.0f)
+    return -32000.0f;
+  else
+    return in;
+}
+
+float lim_num(float in, float num)
+{
+  if (in > num)
+    return num;
+  else if (in < -num)
+    return -num;
+  else
+    return in;
+}
+
+// Function to determine if two quaternions represent the same attitude
+bool same_attitude(float w, float x, float y, float z, float w_d, float x_d, float y_d, float z_d)
+{
+  // Calculate the dot product of the two quaternions
+  float dot_product = w * w_d + x * x_d + y * y_d + z * z_d;
+  // Check if the absolute value of the dot product is close to 1
+  return fabsf(dot_product) > 0.999999f;
+}
+
+void pcontrol(float w, float x, float y, float z, float w_d, float x_d,
+              float y_d, float z_d, float *tau_x, float *tau_y, float *tau_z)
+{
+
+  // if (w*w_d<0.0f)
+  // {
+  //   w_d = -w_d;
+  //   x_d = -x_d;
+  //   y_d = -y_d;
+  //   z_d = -z_d;
+  // }
+
+  if (same_attitude(w, x, y, z, w_d, x_d, y_d, z_d))
+  {
+    *tau_x = 0.0F;
+    *tau_y = 0.0F;
+    *tau_z = 0.0F;
+  }
+  else
+  {
+    float axang1;
+    float axang2;
+    float axang3;
+    float axang4;
+    float rot1;
+    float temp_1;
+
+    temp_1 = ((w * w_d + x * x_d) + y * y_d) + z * z_d;
+
+    if (temp_1 == 1.0F)
+    {
+      /*  axang = [0, 0, 1, 0]; */
+      axang1 = 0.0F;
+      axang2 = 0.0F;
+      axang3 = 1.0F;
+      axang4 = 0.0F;
+    }
+    else
+    {
+
+      axang4 = sqrtf(1.0F - temp_1 * temp_1);
+      axang1 = (((w * x_d - w_d * x) + y * z_d) - y_d * z) / axang4;
+      axang2 = (((w * y_d - w_d * y) - x * z_d) + x_d * z) / axang4;
+      axang3 = (((w * z_d - w_d * z) + x * y_d) - x_d * y) / axang4;
+      axang4 = 2.0F * acosf(temp_1);
+    }
+
+    if (axang4 > 3.1415926535897931f)
+    {
+      axang4 = 6.28318548F - axang4;
+      axang1 = -axang1;
+      axang2 = -axang2;
+      axang3 = -axang3;
+    }
+    else if (axang4 < -3.1415926535897931f)
+    {
+      axang4 += 6.28318548F + axang4;
+      axang1 = -axang1;
+      axang2 = -axang2;
+      axang3 = -axang3;
+    }
+
+    rot1 = axang1 * axang4;
+    axang1 = axang2 * axang4;
+    temp_1 = axang3 * axang4;
+
+    axang4 = (rot1 * x + axang1 * y) + temp_1 * z;
+    axang2 = (rot1 * w - temp_1 * y) + axang1 * z;
+    axang3 = (axang1 * w + temp_1 * x) - rot1 * z;
+    temp_1 = (temp_1 * w - axang1 * x) + rot1 * y;
+
+    *tau_x = ((w * axang2 - y * temp_1) + x * axang4) + z * axang3;
+    *tau_y = ((w * axang3 + x * temp_1) + y * axang4) - z * axang2;
+    *tau_z = ((w * temp_1 - x * axang3) + y * axang2) + z * axang4;
+  }
+}
+
+void eul2quat_my(float yaw, float pitch, float roll,
+                 float *w, float *x, float *y, float *z)
+{
+  float c1c2;
+  float c_idx_0;
+  float c_idx_1;
+  float c_idx_2;
+  float s1s2;
+  float s_idx_0;
+  float s_idx_1;
+  float s_idx_2;
+  s_idx_0 = yaw / 2.0F;
+  s_idx_1 = pitch / 2.0F;
+  s_idx_2 = roll / 2.0F;
+  c_idx_0 = cosf(s_idx_0);
+  s_idx_0 = sinf(s_idx_0);
+  c_idx_1 = cosf(s_idx_1);
+  s_idx_1 = sinf(s_idx_1);
+  c_idx_2 = cosf(s_idx_2);
+  s_idx_2 = sinf(s_idx_2);
+  c1c2 = c_idx_0 * c_idx_1;
+  s1s2 = s_idx_0 * s_idx_1;
+  c_idx_0 *= s_idx_1;
+  s_idx_1 = s_idx_0 * c_idx_1;
+  *w = c1c2 * c_idx_2 + s1s2 * s_idx_2;
+  *x = c1c2 * s_idx_2 - s1s2 * c_idx_2;
+  *y = c_idx_0 * c_idx_2 + s_idx_1 * s_idx_2;
+  *z = s_idx_1 * c_idx_2 - c_idx_0 * s_idx_2;
+}
+
 
 static struct
 {
@@ -272,6 +434,9 @@ static void stabilizerTask(void *param)
 
   DEBUG_PRINT("Ready to fly.\n");
 
+  idle_thrust = 1500.0f;
+  autorotate_thrust = 1550.0f;
+
   while (1)
   {
     // The sensor should unlock at 1kHz
@@ -313,17 +478,125 @@ static void stabilizerTask(void *param)
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
       // collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);
 
-      if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f)  // standing control
+      // controller(&control, &setpoint, &sensorData, &state, tick);
+
+      if (timestamp_setpoint == setpoint.timestamp)
       {
+        // no control input is received
         ;
       }
-      else  // hopping
+      else
       {
-        controller(&control, &setpoint, &sensorData, &state, tick);
-        error_roll_int = 0.0f;
-        error_pitch_int = 0.0f;
+        // control input is received
+        if (setpoint.timestamp > timestamp_setpoint)
+          // time_gap_setpoint = setpoint.timestamp - timestamp_setpoint;
+
+          timestamp_setpoint = setpoint.timestamp;
+
+        // qw_desired_delay = qw_desired;
+        // qx_desired_delay = qx_desired;
+        // qy_desired_delay = qy_desired;
+        // qz_desired_delay = qz_desired;
+
+        // compute desired quat
+        if (fabsf(autorotate_thrust - setpoint.thrust) < 2.0f)
+          ;
+        else
+        {
+          eul2quat_my(setpoint.attitudeRate.yaw * -0.0174532925199433f,
+                      setpoint.attitude.pitch * -0.0174532925199433f,
+                      setpoint.attitude.roll * 0.0174532925199433f,
+                      &qw_desired,
+                      &qx_desired,
+                      &qy_desired,
+                      &qz_desired);
+        }
+
+        // pcontrol(qw_desired_delay,
+        //          qx_desired_delay,
+        //          qy_desired_delay,
+        //          qz_desired_delay,
+        //          qw_desired,
+        //          qx_desired,
+        //          qy_desired,
+        //          qz_desired,
+        //          &omega_x, &omega_y, &omega_z);
+
+        // // desired angular rate in degrees
+        // omega_x = omega_x * 57.2957795130823f * external_loop_freq;
+        // omega_y = omega_y * 57.2957795130823f * external_loop_freq;
+        // omega_z = omega_z * 57.2957795130823f * external_loop_freq;
+
+        // omega_x = lim_num(omega_x, 300);
+        // omega_y = lim_num(omega_y, 300);
+        // omega_z = lim_num(omega_z, 300);
+      }
+      if (fabsf(setpoint.thrust - idle_thrust) < 10.0f)
+      {
+        control.thrust = 500.0f;
+        control.roll = 0.0f;
+        control.pitch = 0.0f;
+        control.yaw = 0.0f;
+      }
+      else if (setpoint.thrust >= 10.0f)
+      {
+        pcontrol(state.attitudeQuaternion.w,
+                 state.attitudeQuaternion.x,
+                 state.attitudeQuaternion.y,
+                 state.attitudeQuaternion.z,
+                 qw_desired,
+                 qx_desired,
+                 qy_desired,
+                 qz_desired,
+                 &tau_x, &tau_y, &tau_z);
+
+        // float angle_error = sqrtf(tau_x * tau_x + tau_y * tau_y + tau_z * tau_z);
+
+        // if (angle_error > angle_error_threshold)
+        // {
+        //   omega_x = (tau_x/angle_error) * angle_error_velocity;
+        //   omega_y = (tau_y/angle_error) * angle_error_velocity;
+        //   omega_z = (tau_z/angle_error) * angle_error_velocity;
+        // }
+        // else
+        // {
+        //   omega_x = 0.0f;
+        //   omega_y = 0.0f;
+        //   omega_z = 0.0f;
+        // }
+
+        tau_x = tau_x + tau_x_offset;
+        tau_y = tau_y + tau_y_offset;
+        tau_z = tau_z + tau_z_offset;
+
+        if (fabsf(autorotate_thrust - setpoint.thrust) < 2.0f)
+        {
+          control.thrust = setpoint.attitude.roll * 100.0f;
+          control.roll = 0.0f;
+          control.pitch = 0.0f;
+          control.yaw = 0.0f;
+        }
+        else
+        {
+          control.thrust = setpoint.thrust;
+          // control.roll = (int16_t)limint16(tau_x * kp_xy + (omega_x - sensorData.gyro.x) * kd_xy);
+          // control.pitch = -(int16_t)limint16(tau_y * kp_xy + (omega_y - sensorData.gyro.y) * kd_xy);
+          // control.yaw = -(int16_t)limint16(tau_z * kp_z + (omega_z - sensorData.gyro.z) * kd_z);
+
+          control.roll = (int16_t)limint16(tau_x * kp_xy + ( - sensorData.gyro.x) * kd_xy);
+          control.pitch = -(int16_t)limint16(tau_y * kp_xy + ( - sensorData.gyro.y) * kd_xy);
+          control.yaw = -(int16_t)limint16(tau_z * kp_z + ( - sensorData.gyro.z) * kd_z);
+        }
+      }
+      else
+      {
+        control.thrust = 0.0f;
+        control.roll = 0.0f;
+        control.pitch = 0.0f;
+        control.yaw = 0.0f;
       }
 
+      
       if (setpoint.thrust>=10000.0f && setpoint.thrust<=11000.0f) // hopping
       {
         if (leg_motor_flag)
@@ -346,68 +619,6 @@ static void stabilizerTask(void *param)
         control.thrust = 1000.0f;
         leg_motor_timer_limit = (uint16_t)(setpoint.thrust - 10000.0f);
       }     
-      else if (fabsf(setpoint.thrust - stand_thrust_threshold) <= 100.0f) // standing control
-      {
-        if (fabsf(setpoint.thrust - jump_test_threshold) <= 1.0f)
-        {
-          jump_flag = true;
-        }
-        else
-        {
-          jump_flag = false;
-          jump_finish_flag = false;
-        }
-
-        if (sensorData.acc.z > 5.0f)
-        {
-          jump_finish_flag = true;
-        }
-
-        // jumping motor test
-        if (jump_flag && !jump_finish_flag)
-        {
-          servoRatio_stabilizer = servoRatio_spin;
-        }
-        else
-        {
-          servoRatio_stabilizer = servoRatio_stop;
-        }
-
-        float error_roll = setpoint.attitude.roll - state.attitude.roll;
-        float error_pitch = setpoint.attitude.pitch - state.attitude.pitch;
-        error_roll_int = error_roll_int + error_roll * 0.001f;
-        error_pitch_int = error_pitch_int + error_pitch * 0.001f;
-
-        float pitch_temp = -state.attitude.pitch / 180 * M_PI_F;
-        float tau_x = (kp_roll * error_roll + kd_roll * (-sensorData.gyro.x) + ki_roll * error_roll_int) - stand_mgl * cosf(pitch_temp) * sinf(state.attitude.roll / 180 * M_PI_F);
-        float tau_y = (kp_pitch * error_pitch + kd_pitch * (sensorData.gyro.y) + ki_pitch * error_pitch_int) + stand_mgl * sinf(pitch_temp);
-        float tau_z = -kd_yaw * (setpoint.attitudeRate.yaw - sensorData.gyro.z);
-
-        if (tau_z > 12000.0f)
-          tau_z = 12000.0f;
-        if (tau_z < -12000.0f)
-          tau_z = -12000.0f;
-
-        if (tau_x > 12000.0f)
-          tau_x = 12000.0f;
-        if (tau_x < -12000.0f)
-          tau_x = -12000.0f;
-
-        if (tau_y > 12000.0f)
-          tau_y = 12000.0f;
-        if (tau_y < -12000.0f)
-          tau_y = -12000.0f;
-
-        // saturation needed here
-        //  control.thrust = 1000.0f;
-        //  control.yaw = 0.0f;
-
-        control.thrust = 1000.0f;
-        control.pitch = (int16_t)tau_y;
-        control.roll = (int16_t)tau_x;
-        control.yaw = (int16_t)tau_z;
-      }      
-      // else if (setpoint.thrust < 10.0f)// not jump, not stand
       else
       {
         leg_motor_flag = false;
@@ -670,23 +881,21 @@ PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
 // PARAM_ADD(PARAM_UINT8, servo, &servoRatio_stabilizer)
-PARAM_ADD(PARAM_FLOAT, stt, &stand_thrust_threshold)
-PARAM_ADD(PARAM_FLOAT, mgl, &stand_mgl)
-
-PARAM_ADD(PARAM_FLOAT, kir, &ki_roll)
-PARAM_ADD(PARAM_FLOAT, kpr, &kp_roll)
-PARAM_ADD(PARAM_FLOAT, kdr, &kd_roll)
-PARAM_ADD(PARAM_FLOAT, kip, &ki_pitch)
-PARAM_ADD(PARAM_FLOAT, kpp, &kp_pitch)
-PARAM_ADD(PARAM_FLOAT, kdp, &kd_pitch)
-PARAM_ADD(PARAM_FLOAT, kdy, &kd_yaw)
 
 PARAM_ADD(PARAM_UINT8, st, &servo_test)
 PARAM_ADD(PARAM_UINT8, stf, &servo_test_flag)
-PARAM_ADD(PARAM_FLOAT, jtt, &jump_test_threshold)
 PARAM_ADD(PARAM_UINT8, srst, &servoRatio_stop)
 PARAM_ADD(PARAM_UINT8, srsp, &servoRatio_spin)
-// PARAM_ADD(PARAM_UINT16, lmtl, &leg_motor_timer_limit)
+
+PARAM_ADD(PARAM_FLOAT, kpxy, &kp_xy)
+PARAM_ADD(PARAM_FLOAT, kpz, &kp_z)
+PARAM_ADD(PARAM_FLOAT, kdxy, &kd_xy)
+PARAM_ADD(PARAM_FLOAT, kdz, &kd_z)
+
+PARAM_ADD(PARAM_FLOAT, qxo, &tau_x_offset)
+PARAM_ADD(PARAM_FLOAT, qyo, &tau_y_offset)
+PARAM_ADD(PARAM_FLOAT, qzo, &tau_z_offset)
+
 PARAM_GROUP_STOP(stabilizer)
 
 LOG_GROUP_START(health)
