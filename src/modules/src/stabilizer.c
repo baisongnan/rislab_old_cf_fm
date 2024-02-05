@@ -468,7 +468,7 @@ static void stabilizerTask(void *param)
         controllerInit(controllerType);
         controllerType = getControllerType();
       }
-
+      float setpoint_thrust_old = setpoint.thrust;
       stateEstimator(&state, &sensorData, &control, tick);
       compressState();
 
@@ -595,7 +595,7 @@ static void stabilizerTask(void *param)
         control.pitch = 0.0f;
         control.yaw = 0.0f;
       }
-
+      
       
       if (setpoint.thrust>=10000.0f && setpoint.thrust<=11000.0f) // hopping
       {
@@ -606,7 +606,7 @@ static void stabilizerTask(void *param)
         }
         else
         {
-          if (sensorData.acc.z > 2.0f)
+          if (setpoint_thrust_old < setpoint.thrust)
           {
             leg_motor_flag = true;
             leg_motor_timer = 0;
@@ -616,7 +616,7 @@ static void stabilizerTask(void *param)
             servoRatio_stabilizer = servoRatio_stop;
           }
         }
-        control.thrust = 1000.0f;
+        control.thrust = 0.0f;
         leg_motor_timer_limit = (uint16_t)(setpoint.thrust - 10000.0f);
       }     
       else
