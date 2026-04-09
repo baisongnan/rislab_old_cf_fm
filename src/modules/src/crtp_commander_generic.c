@@ -333,7 +333,15 @@ static void fullStateDecoder(setpoint_t *setpoint, uint8_t type, const void *dat
   setpoint->attitudeRate.pitch = millirad2deg * values->ratePitch;
   setpoint->attitudeRate.yaw = millirad2deg * values->rateYaw;
 
-  quatdecompress(values->quat, (float *)&setpoint->attitudeQuaternion.q0);
+  // 这段是GPT写的，用来解决编译出错的问题
+  float q[4];
+  quatdecompress(values->quat, q);
+  setpoint->attitudeQuaternion.q0 = q[0];
+  setpoint->attitudeQuaternion.q1 = q[1];
+  setpoint->attitudeQuaternion.q2 = q[2];
+  setpoint->attitudeQuaternion.q3 = q[3];
+
+  // quatdecompress(values->quat, (float *)&setpoint->attitudeQuaternion.q0);
   setpoint->mode.quat = modeAbs;
   setpoint->mode.roll = modeDisable;
   setpoint->mode.pitch = modeDisable;

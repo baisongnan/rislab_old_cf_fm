@@ -31,6 +31,9 @@
 #include "deck.h"
 #include "debug.h"
 
+#include "servodeck.h"
+#include "currentdeck.h"
+
 #ifdef DEBUG
   #define DECK_CORE_DBG_PRINT(fmt, ...)  DEBUG_PRINT(fmt, ## __VA_ARGS__)
 #else
@@ -43,6 +46,9 @@ void deckInit()
 {
   deckDriverCount();
   deckInfoInit();
+
+  servoDeckForceInit();
+  currentDeckForceInit();
 
   int nDecks;
   int i;

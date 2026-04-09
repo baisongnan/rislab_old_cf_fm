@@ -24,7 +24,9 @@
  * servodeck.c - Deck driver for a servo motor
  * Connect power to VCOM (pin 9 right), ground to GND (pin 10 left), signal to TX (pin 1 right)
  */
-
+ 
+#define DEBUG_MODULE "CS"
+#include "debug.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include "stm32fxxx.h"
@@ -69,8 +71,6 @@ static xTimerHandle timer;
 
 static uint16_t freq = 50;
 
-
- 
 
 static void servoSetRatio(uint8_t ratio)
 {
@@ -147,6 +147,12 @@ static void servoDeckInit(DeckInfo *info)
   xTimerStart(timer, 100);
 
   isInit = true;
+  DEBUG_PRINT("servodeck start.\n");
+}
+
+void servoDeckForceInit(void)
+{
+  servoDeckInit(NULL);
 }
 
 static const DeckDriver servo_deck = {

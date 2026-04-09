@@ -198,7 +198,15 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       ext_pose.x = item->x / 1000.0f;
       ext_pose.y = item->y / 1000.0f;
       ext_pose.z = item->z / 1000.0f;
-      quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
+
+      // 这段是GPT写的，用来解决编译出错的问题
+      float q[4];
+      quatdecompress(item->quat, q);
+      ext_pose.quat.q0 = q[0];
+      ext_pose.quat.q1 = q[1];
+      ext_pose.quat.q2 = q[2];
+      ext_pose.quat.q3 = q[3];
+      // quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
       ext_pose.stdDevQuat = extQuatStdDev;
       // estimatorEnqueuePose(&ext_pose);
